@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neural Portfolio — From Neuron to Transformer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#02030a;--fg:#d8ecff;--mut:#7f97b3;--acc:#ff7a2a;--cy:#6fd6ff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:'Space Grotesk',system-ui,sans-serif;overflow-x:hidden}
+body.lock{overflow:hidden;height:100%}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+#grid{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 1.2s;
+background:linear-gradient(rgba(111,214,255,.07) 1px,transparent 1px) 0 0/48px 48px,linear-gradient(90deg,rgba(111,214,255,.07) 1px,transparent 1px) 0 0/48px 48px}
+body.flat #grid{opacity:1}
+#scroll{position:relative;z-index:2}
+section{min-height:100vh;display:flex;align-items:center;padding:0 6vw}
+.card{max-width:540px;padding:28px 30px;border:1px solid rgba(111,214,255,.18);border-radius:18px;
+background:rgba(4,10,24,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+opacity:0;transform:var(--from,translateX(-70px));transition:all 1.1s cubic-bezier(.2,.8,.2,1)}
+section.on .card{opacity:1;transform:none}
+.tag{font:400 12px 'JetBrains Mono',monospace;color:var(--acc);letter-spacing:.18em;text-transform:uppercase}
+h1,h2{margin:.35em 0 .2em;font-weight:700;line-height:1.05}
+h1{font-size:clamp(40px,7vw,84px);background:linear-gradient(90deg,#fff,var(--cy),var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent}
+h2{font-size:clamp(28px,4vw,46px)}
+p{color:#b6c9de;line-height:1.6;margin:.5em 0}
+.eq{font:400 13px 'JetBrains Mono',monospace;color:var(--cy);background:rgba(111,214,255,.08);padding:8px 12px;border-radius:8px;display:inline-block}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chips span{font:400 11px 'JetBrains Mono',monospace;padding:4px 9px;border:1px solid rgba(255,122,42,.4);border-radius:99px;color:#ffb98a}
+a.btn,button.btn{font:500 14px 'Space Grotesk',sans-serif;color:#fff;text-decoration:none;cursor:pointer;display:inline-block;margin:8px 8px 0 0;
+padding:12px 22px;border-radius:99px;border:1px solid var(--acc);background:rgba(255,122,42,.12);transition:.3s}
+a.btn:hover,button.btn:hover{background:var(--acc);box-shadow:0 0 28px rgba(255,122,42,.6)}
+#loader{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:9vh;
+transition:opacity 1.6s ease .6s;text-align:center;background:radial-gradient(ellipse at center,transparent 40%,rgba(2,3,10,.85))}
+#loader.go{opacity:0;pointer-events:none}
+#loader h3{margin:0 0 6px;font-weight:300;letter-spacing:.4em;font-size:14px;color:var(--cy)}
+#bar{width:min(320px,70vw);height:2px;background:rgba(255,255,255,.1);margin:12px 0 18px;overflow:hidden}
+#bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cy),var(--acc));box-shadow:0 0 12px var(--acc)}
+#status{font:400 11px 'JetBrains Mono',monospace;color:var(--mut);height:16px}
+#enter{opacity:0;pointer-events:none;transition:opacity .8s;margin-top:14px}
+#enter.show{opacity:1;pointer-events:auto}
+#hud{position:fixed;z-index:20;inset:0;pointer-events:none;opacity:0;transition:opacity 1.5s}
+#hud.on{opacity:1}
+#nav{position:fixed;right:18px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px;pointer-events:auto}
+#nav b{position:relative;width:11px;height:11px;border-radius:50%;border:1.5px solid var(--cy);cursor:pointer;transition:.3s;background:transparent}
+#nav b.act{background:var(--acc);border-color:var(--acc);box-shadow:0 0 14px var(--acc);transform:scale(1.35)}
+#nav b span{position:absolute;right:20px;top:-3px;font:400 11px 'JetBrains Mono',monospace;white-space:nowrap;opacity:0;color:var(--fg);transition:.3s}
+#nav b:hover span{opacity:1}
+#mode{position:fixed;left:18px;top:calc(18px + env(safe-area-inset-top,0px));pointer-events:auto;margin:0}
+#brand{position:fixed;right:22px;top:calc(22px + env(safe-area-inset-top,0px));font:400 11px 'JetBrains Mono',monospace;color:var(--mut);letter-spacing:.15em}
+#depth{position:fixed;left:22px;bottom:calc(22px + env(safe-area-inset-bottom,0px));font:400 11px 'JetBrains Mono',monospace;color:var(--mut)}
+@media(max-width:700px){section{align-items:flex-end;padding-bottom:8vh}#nav{right:8px}}
+#map{position:fixed;left:22px;bottom:52px;width:72px;height:120px;border:1px solid rgba(111,214,255,.25);border-radius:8px;background:rgba(4,10,24,.5)}
+.live{margin-top:14px;padding:12px 14px;border-radius:10px;background:rgba(2,6,16,.72);border:1px solid rgba(255,122,42,.3);font:400 11px/1.6 'JetBrains Mono',monospace;color:#cfe6ff;white-space:pre;overflow-x:auto;min-height:60px}.live b{color:var(--acc);font-weight:400}.live i{color:var(--cy);font-style:normal}.live span{padding:1px 3px}
+#detail{position:fixed;inset:0;z-index:40;overflow-y:auto;padding:calc(64px + env(safe-area-inset-top,0px)) 6vw 70px;background:radial-gradient(ellipse at 30% 15%,rgba(12,24,56,.82),rgba(2,3,10,.93));backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;pointer-events:none;transition:opacity 1s}
+#detail.open{opacity:1;pointer-events:auto}
+.dwrap{max-width:1050px;margin:0 auto}.dwrap h3{margin:34px 0 12px}.dwrap ul{color:#b6c9de;line-height:1.8;padding-left:20px}
+.rv{opacity:1}#detail.open .rv{animation:rv .9s cubic-bezier(.2,.8,.2,1) both}@keyframes rv{from{opacity:0;transform:translateY(40px) scale(.97)}to{opacity:1;transform:none}}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px}
+figure{margin:0;border:1px solid rgba(111,214,255,.2);border-radius:14px;overflow:hidden;background:rgba(4,10,24,.6)}figure canvas,figure img{width:100%;display:block}figcaption{padding:10px 14px;font:400 11px 'JetBrains Mono',monospace;color:var(--mut)}
+.proj{padding:18px;border:1px solid rgba(255,122,42,.3);border-radius:14px;background:rgba(4,10,24,.6)}.proj p{margin:6px 0 10px}.proj .m{font:400 12px 'JetBrains Mono',monospace;color:var(--acc)}
+#warp{position:fixed;inset:0;z-index:45;pointer-events:none;opacity:0;background:radial-gradient(circle,#fff 0%,rgba(255,150,70,.85) 22%,rgba(111,214,255,.25) 45%,transparent 68%)}#warp.fl{animation:fl 1.3s ease-out}@keyframes fl{0%{opacity:0;transform:scale(.3)}35%{opacity:1}100%{opacity:0;transform:scale(2.6)}}
+body.diving .card{opacity:0!important;transition:opacity .4s}body.diving #hud{opacity:0!important}
+#mode{width:44px;height:44px;padding:0;border-radius:50%;font-size:18px;line-height:1}
+#snd{position:fixed;left:70px;top:calc(18px + env(safe-area-inset-top,0px));pointer-events:auto;margin:0;width:44px;height:44px;padding:0;border-radius:50%;font-size:17px;line-height:1}
+.pad{display:flex;gap:14px;align-items:center;margin:14px 0 4px}.padg{display:grid;grid-template-columns:repeat(5,26px);gap:3px;touch-action:none;cursor:crosshair;flex:none}.padg i{display:block;width:26px;height:26px;border-radius:5px;background:rgba(111,214,255,.1);border:1px solid rgba(111,214,255,.28)}
+.padr{font:400 11px/1.55 'JetBrains Mono',monospace;color:#cfe6ff}.padr button{font:inherit;padding:2px 9px;margin:6px 4px 0 0;border:1px solid rgba(111,214,255,.4);background:none;color:var(--cy);border-radius:6px;cursor:pointer}#padout{white-space:pre;display:block;margin-top:4px}
+.lab{margin:12px 0 2px;font:400 11px/1.5 'JetBrains Mono',monospace;color:#cfe6ff}.lab canvas{display:block;margin:6px 0;background:rgba(2,6,16,.7);border:1px solid rgba(111,214,255,.28);border-radius:8px;touch-action:none;cursor:crosshair;max-width:100%}.lab input[type=range]{width:100%;accent-color:#ff7a2a}.lab input[type=text]{width:100%;background:rgba(2,6,16,.7);border:1px solid rgba(111,214,255,.4);color:#fff;border-radius:8px;padding:7px 10px;font:inherit}.lab button{font:inherit;padding:2px 9px;margin:4px 4px 0 0;border:1px solid rgba(111,214,255,.4);background:none;color:var(--cy);border-radius:6px;cursor:pointer}
+#loader{justify-content:space-between;align-items:stretch;padding:calc(18px + env(safe-area-inset-top,0px)) 5vw calc(5vh + env(safe-area-inset-bottom,0px));background:radial-gradient(ellipse at center,transparent 38%,rgba(2,3,10,.5) 75%,rgba(2,3,10,.88));transition:opacity 2s ease .8s}
+.lt{display:flex;justify-content:space-between;align-items:center;font:400 11px 'JetBrains Mono',monospace;letter-spacing:.22em;color:var(--mut)}
+#lsnd{pointer-events:auto;margin:0;padding:6px 14px;font-size:11px;letter-spacing:.1em}
+.lc{text-align:center;margin-top:2vh}.eyebrow{font:400 11px 'JetBrains Mono',monospace;letter-spacing:.35em;color:var(--acc);text-transform:uppercase}
+.ltitle{margin:.2em 0;font-size:clamp(30px,6vw,70px);font-weight:300;letter-spacing:.02em;background:linear-gradient(90deg,#8fc4ff,#fff 45%,#ffb070);-webkit-background-clip:text;background-clip:text;color:transparent;animation:tt 6s ease-in-out infinite alternate}@keyframes tt{from{letter-spacing:.01em}to{letter-spacing:.06em}}
+.lsub{color:#b6c9de;max-width:520px;margin:0 auto;font-weight:300;font-size:clamp(13px,1.6vw,17px)}
+.lb{display:flex;flex-direction:column;align-items:center}.cnts{display:flex;gap:clamp(14px,5vw,56px);margin-bottom:14px}.cnts div{text-align:center}
+.cnts b{display:block;font:500 clamp(16px,2.4vw,26px) 'Space Grotesk',sans-serif;color:#fff;font-variant-numeric:tabular-nums}.cnts span{font:400 10px 'JetBrains Mono',monospace;letter-spacing:.2em;color:var(--mut);text-transform:uppercase}
+#enter{padding:16px 40px;font-size:14px;letter-spacing:.22em;text-transform:uppercase;position:relative}#enter.show::after{content:'';position:absolute;inset:-6px;border-radius:99px;border:1px solid rgba(255,122,42,.6);animation:ring 2s infinite}@keyframes ring{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.4);opacity:0}}
+#hyper{position:fixed;inset:0;z-index:48;pointer-events:none;opacity:0;background:repeating-conic-gradient(from 0deg at 50% 50%,transparent 0 1.6deg,rgba(170,210,255,.55) 1.7deg 1.9deg,transparent 2deg 3.4deg);-webkit-mask:radial-gradient(circle,transparent 8%,#000 60%);mask:radial-gradient(circle,transparent 8%,#000 60%)}body.hyper #hyper{animation:hy 2.2s ease-in forwards}@keyframes hy{0%{opacity:0;transform:scale(.6)}35%{opacity:.9}100%{opacity:0;transform:scale(3)}}
+</style>
+</head>
+<body class="lock">
+<canvas id="gl"></canvas><div id="grid"></div>
+
+<div id="loader">
+  <div class="lt"><span>NEURAL · COSMOS</span><span id="coord">RA 05h 35m · DEC −05° 23′</span><button class="btn" id="lsnd">🔇 sound</button></div>
+  <div class="lc"><div class="eyebrow">86 billion neurons · 100 billion stars</div><h1 class="ltitle">The mind is a universe</h1><p class="lsub">Infinite possibilities — in a skull, and in silicon.</p></div>
+  <div class="lb">
+    <div class="cnts"><div><b id="c1">0 B</b><span>neurons ignited</span></div><div><b id="c2">0 T</b><span>synapses formed</span></div><div><b id="c3">0 B</b><span>stars charted</span></div></div>
+    <div id="bar"><i></i></div>
+    <div id="status">igniting first neurons…</div>
+    <button class="btn" id="enter">Enter the Mind →</button>
+  </div>
+</div>
+
+<div id="hud">
+  <button class="btn" id="mode" title="Toggle 2D / 3D" aria-label="Toggle 2D / 3D">▦</button><button class="btn" id="snd" title="Sound on / off" aria-label="Sound on / off">🔇</button>
+  <div id="brand">NEURON → TENSOR → TRANSFORMER → DIFFUSION</div>
+  <div id="nav"></div>
+  <canvas id="map" width="144" height="240"></canvas><div id="depth"></div>
+</div>
+
+<div id="detail"></div><div id="warp"></div><div id="hyper"></div>
+<main id="scroll"></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============ EDIT YOUR CONTENT HERE ============ */
+const ME={name:"Aditya Bhattacharya",role:"Data Scientist Intern @ SLB · ML / Deep Learning / AI Engineer",email:"adityabhattacharya3002@gmail.com",phone:"+918303399384",
+ github:"https://github.com/aditya-bhattacharya",linkedin:"https://linkedin.com/in/aditya-bhattacharya",paper:"https://www.researchgate.net/publication/395407803_An_Offline_AI_Assistant_for_eSim_Easier_Accessible_Open-Source_Circuit_Design_and_Debugging"};
+// camera journey: top→bottom, left↔right (x,y,z of each stage)
+const PATH=[[0,-2,-6],[0,-34,-22],[38,-52,-30],[76,-84,-26],[40,-120,-50],[-4,-150,-30],[-42,-182,-52],[-6,-214,-30],[36,-248,-50],[0,-282,-30]];
+const CAREER=[
+ {key:"neuron",tag:"Section 01 · Education · The Neuron",title:"Education",when:"Aug 2023 – Jul 2027",
+  text:"Bachelor of Technology in Computer Science and Design Engineering at Rajiv Gandhi Institute of Petroleum Technology (RGIPT), Jais, Amethi, India.",
+  eq:"V(t) > θ  ⇒  spike",chips:["B.Tech", "Computer Science & Design Engineering", "RGIPT, Jais Amethi", "2023 – 2027"],
+  terms:["dendrite","axon","synapse","Hebbian learning","action potential","neuroplasticity","LTP","threshold θ"]},
+ {key:"perceptron",tag:"Section 02 · Technical Skills · The Perceptron",title:"Technical Skills",when:"The weights & biases of my toolkit",
+  text:"Programming, frameworks and libraries, big data and databases, tools and platforms, ML/AI techniques — plus the leadership principles I work by.",
+  eq:"y = σ( Σ wᵢxᵢ + b )",chips:["Python", "PyTorch", "TensorFlow", "Hugging Face", "Spark", "Docker"],
+  terms:["weights wᵢ","bias b","step function","sigmoid σ","linear separability","decision boundary","feature vector","PCA"]},
+ {key:"ann",tag:"Section 03 · Professional Experience · ANN",title:"Professional Experience",when:"Sambin 2024 · FOSSEE IIT Bombay 2025 · SLB 2026",
+  text:"Three internships stacked like layers: Sambin Technologies (data engineering), FOSSEE, IIT Bombay (SLM-based EDA assistant) and SLB (seismic Vision Transformers). My IEEE – Curtin research internship is under Research.",
+  eq:"θ ← θ − η ∇L(θ)",chips:["SLB", "FOSSEE, IIT Bombay", "Sambin Technologies", "Vision Transformers", "Agentic RAG", "Selenium"],
+  terms:["backpropagation","ReLU","dropout","batch norm","cross-entropy","learning rate η","overfitting","L2 regularization"]},
+ {key:"cnn",tag:"Section 04 · Projects · CNN",title:"Projects",when:"Jun 2024 – Sep 2025",
+  text:"Speak Tutorial (quantized agentic RAG), SARVADRISHTHI (YOLOv8 + blockchain) and LocoCHAT (offline ChatGPT) — reading documents, seeing faces and chatting offline.",
+  eq:"(f ∗ g)[n] = Σ f[m]·g[n−m]",chips:["YOLOv8", "GAN", "Dlib", "Llama3", "Ollama", "Agentic RAG"],
+  terms:["kernel 3×3","stride","padding","max pooling","feature map","tensor H×W×C","receptive field","transfer learning"]},
+ {key:"rnn",tag:"Section 05 · Research · RNN / LSTM",title:"Research",when:"IEEE – Curtin University, Malaysia · Apr 2025 – Jan 2026",
+  text:"Research Intern (Remote): a federated sentiment-analysis pipeline using DistilBERT that outperformed BERT/RoBERTa (F1 0.91, ROC-AUC 0.94, precision 0.90, recall 0.92), reducing inference latency by 52% through 5-fold cross-validation.",
+  eq:"hₜ = tanh(W·hₜ₋₁ + U·xₜ)",chips:["Federated Learning", "DistilBERT", "Sentiment Analysis", "5-fold CV", "Hugging Face"],
+  terms:["hidden state hₜ","BPTT","vanishing gradient","forget gate","LSTM cell","GRU","teacher forcing","CTC loss"]},
+ {key:"ae",tag:"Section 06 · Publications · Autoencoder",title:"Publications",when:"2025 · Open Opportunity Source Conference 3.0, IIT Kanpur",
+  text:"An Offline AI Assistant for eSim: Accessible, Open-Source Circuit Design and Debugging — presented at Open Opportunity Source Conference 3.0, IIT Kanpur, 2025.",
+  eq:"L = ‖x − x̂‖² + β·KL(q‖p)",chips:["eSim", "Offline AI Assistant", "Open Source", "IIT Kanpur", "ResearchGate"],
+  terms:["latent space z","bottleneck","encoder","decoder","KL divergence","contrastive loss","k-means","UMAP"]},
+ {key:"tf",tag:"Section 07 · Achievements · Transformer",title:"Achievements",when:"2024 – 2025",
+  text:"Linux Foundation Mentorship (LFX 2025), Amazon ML Summer School 2025, SPG-SLB Hackathon (2nd runner-up), HMEL Quest Hackathon (2nd), Smart India Hackathon 2024 finalist and Google AI for Impact (top 95 APAC).",
+  eq:"softmax(QKᵀ/√d)·V",chips:["LFX 2025", "Amazon ML Summer School", "SPG-SLB", "HMEL Quest", "SIH 2024", "Google AI"],
+  terms:["self-attention","multi-head","positional encoding","BERT","GPT","tokenization","RLHF","fine-tuning"]},
+ {key:"diff",tag:"Section 08 · Leadership & Roles · Generative",title:"Leadership & Roles",when:"Nov 2025 – Present",
+  text:"Secretary, Computer Society — IEEE RGIPT (mentored 50+ members, ran ML workshops and hackathons) and Technical Officer, AIChE-RGIPT (led a 20+ member team building the official website).",
+  eq:"xₜ = √ᾱ·x₀ + √(1−ᾱ)·ε",chips:["IEEE RGIPT", "AIChE-RGIPT", "Mentoring", "Workshops", "Hackathons"],
+  terms:["denoising","U-Net","GAN","Q-learning","policy gradient","scaling laws","MoE","inference"]}
+];
+/* ================================================== */
+const scroll=document.getElementById('scroll'),nav=document.getElementById('nav');
+const secs=[`<section><div class="card"><div class="tag">Inside the cortex</div><h1>${ME.name}</h1><p>${ME.role}. B.Tech, Computer Science and Design Engineering · Rajiv Gandhi Institute of Petroleum Technology, Jais, Amethi (2023–2027). Dive through eight layers — Education, Technical Skills, Professional Experience, Projects, Research, Publications, Achievements and Leadership — one signal from a single neuron down to generative AI. Scroll, tap the dots, or use ↑ ↓.</p><div class="tag" style="margin-top:14px">↓ begin the descent</div></div></section>`];
+CAREER.forEach((c,i)=>{c.side=i%2?-1:1;const a=PATH[i+1],b=PATH[i],dx=a[0]-b[0],dy=a[1]-b[1];
+ const from=Math.abs(dx)>Math.abs(dy)*.6?`translateX(${dx>0?90:-90}px)`:'translateY(80px)';
+ secs.push(`<section style="justify-content:${c.side>0?'flex-start':'flex-end'};--from:${from}"><div class="card"><div class="tag">${c.tag}</div><h2>${c.title}</h2><div class="tag" style="color:var(--cy)">${c.when}</div><p>${c.text}</p><div class="eq">${c.eq}</div><div class="chips">${c.chips.map(x=>`<span>${x}</span>`).join('')}</div><button class="btn dv" data-i="${i}">⤓ Dive into this section</button><div class="live" id="live-${c.key}"></div></div></section>`)});
+secs.push(`<section style="--from:translateY(80px)"><div class="card"><div class="tag">Output layer</div><h2>Let’s connect</h2><p>The final activation — open to research, engineering and collaboration.</p><div class="chips" style="margin:0 0 10px"><span>Deliver Results</span><span>Dive Deep</span><span>Invent and Simplify</span><span>Bias for Action</span><span>Earn Trust</span></div><a class="btn" href="mailto:${ME.email}">Email</a><a class="btn" href="tel:${ME.phone}">Call</a><a class="btn" href="${ME.paper}">Publication</a><a class="btn" href="${ME.github}">GitHub</a><a class="btn" href="${ME.linkedin}">LinkedIn</a></div></section>`);
+scroll.innerHTML=secs.join('');scroll.querySelectorAll('.dv').forEach(b=>b.onclick=()=>dive(+b.dataset.i));
+const names=['Cortex',...CAREER.map(c=>c.title),'Output'];
+names.forEach((n,i)=>{const b=document.createElement('b');b.innerHTML=`<span>${n}</span>`;b.onclick=()=>scrollTo({top:i*innerHeight,behavior:'smooth'});nav.appendChild(b)});
+const sections=[...scroll.children],dots=[...nav.children];
+
+// ---------- Three setup ----------
+const canvas=document.getElementById('gl');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x02030a);
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0x02030a,0.014);
+const camera=new THREE.PerspectiveCamera(60,1,.05,400);camera.position.set(0,0,8);
+function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+
+const glow=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+const g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'#fff');g.addColorStop(.25,'rgba(255,255,255,.7)');g.addColorStop(1,'rgba(255,255,255,0)');
+x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c)})();
+const pm=(size,color,op=1)=>new THREE.PointsMaterial({size,color,map:glow,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending});
+const lm=(color,op)=>new THREE.LineBasicMaterial({color,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false});
+const V=(x,y,z)=>new THREE.Vector3(x,y,z),R=()=>Math.random();
+const ups=[];
+
+function pointsOf(arr,mat){const g=new THREE.BufferGeometry().setFromPoints(arr);return new THREE.Points(g,mat)}
+function linesOf(edges,mat){const a=[];edges.forEach(e=>a.push(e[0],e[1]));return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(a),mat)}
+function pulses(edges,n,color,size){
+  const g=new THREE.BufferGeometry(),pos=new Float32Array(n*3);g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const st=[...Array(n)].map(()=>({e:edges[R()*edges.length|0],t:R(),v:.006+R()*.014}));
+  const p=new THREE.Points(g,pm(size,color));p.frustumCulled=false;
+  ups.push(()=>{st.forEach((s,i)=>{s.t+=s.v;if(s.t>1){s.t=0;s.e=edges[R()*edges.length|0];if(R()<.04)blip(.7)}
+    const a=s.e[0],b=s.e[1];pos[i*3]=a.x+(b.x-a.x)*s.t;pos[i*3+1]=a.y+(b.y-a.y)*s.t;pos[i*3+2]=a.z+(b.z-a.z)*s.t});
+    g.attributes.position.needsUpdate=true});
+  return p}
+
+// ---------- Brain (scan-line hologram with gyri, temporal lobes, cerebellum, stem) ----------
+const brain=new THREE.Group();scene.add(brain);
+const ringE=[],bpts=[];
+function rings(cx,cy,cz,rx,ry,rz,n,seg,amp,sq){
+ for(let j=0;j<=n;j++){const v=-1+2*j/n,s=Math.sqrt(Math.max(0,1-v*v)),y=cy+v*ry*(v<0?sq:1);let pv=null;
+  for(let k=0;k<=seg;k++){const th=k/seg*6.2832,m=1+amp*(Math.sin(3*th+v*5)*Math.sin(5*th-v*4)+.6*Math.sin(9*th+v*8)+.3*Math.sin(15*th-v*12));
+   const q=V(cx+Math.cos(th)*rx*s*m,y,cz+Math.sin(th)*rz*s*m);if(pv)ringE.push([pv,q]);pv=q;if(k%3===0&&R()<.5)bpts.push(q)}}}
+[-1,1].forEach(s=>{rings(s*.6,0,0,1.1,1.45,2.25,56,110,.06,.7);rings(s*.95,-.85,.5,.5,.42,1.15,14,50,.04,1)});
+rings(0,-1.25,-1.75,.85,.5,.65,26,70,.015,1);rings(0,-2,-1,.28,.7,.28,10,24,0,1);
+brain.add(linesOf(ringE,lm(0x8fd0ff,.34)));brain.add(pointsOf(bpts,pm(.035,0xcfeaff,.8)));
+const bn=[];for(let i=0;i<22;i++){const s=i%2?1:-1;bn.push(V(s*(.3+R()*.8),(R()-.5)*2,(R()-.5)*3.6))}
+const be=[];bn.forEach((a,i)=>{bn.map((b,j)=>[j,a.distanceTo(b)]).filter(o=>o[0]!==i).sort((x,y)=>x[1]-y[1]).slice(0,2).forEach(o=>be.push([a,bn[o[0]]]))});
+brain.add(pointsOf(bn,pm(.5,0xff7a2a,1)));brain.add(pointsOf(bn,pm(.14,0xffffff,1)));
+brain.add(linesOf(be,lm(0xff7a2a,.55)));brain.add(pulses(be,90,0xffd2a8,.18));
+brain.scale.setScalar(1.3);brain.rotation.y=-Math.PI/2+.45;
+
+// ---------- Stage builders ----------
+function stageFrom(L,edges,extra){
+  const inner=new THREE.Group(),all=L.flat();
+  inner.add(pointsOf(all,pm(.55,0xff7a2a)));inner.add(pointsOf(all,pm(.18,0xffffff)));
+  inner.add(linesOf(edges,lm(0x6fd6ff,.28)));inner.add(pulses(edges,Math.min(160,edges.length),0xffb070,.3));
+  if(extra)inner.add(extra);return inner}
+function dense(counts,dx,dy,zs,p=1){const L=counts.map((n,i)=>[...Array(n)].map((_,j)=>V((i-(counts.length-1)/2)*dx,(j-(n-1)/2)*dy,(R()-.5)*zs)));
+  const E=[];for(let i=0;i<L.length-1;i++)L[i].forEach(a=>L[i+1].forEach(b=>R()<p&&E.push([a,b])));return[L,E]}
+const B={
+ neuron(){const L=[[V(0,0,0)]],E=[];
+  (function br(p,d,depth){if(depth>4)return;const k=depth<2?3:2;
+    for(let i=0;i<k;i++){const nd=d.clone().add(V(R()-.5,R()-.5,R()-.5).multiplyScalar(1.1)).normalize();
+      const q=p.clone().add(nd.multiplyScalar(2.1-depth*.3));E.push([p,q]);L[0].push(q);br(q,nd,depth+1)}})(V(0,0,0),V(1,0,0),0);
+  (function br(p,d,depth){if(depth>3)return;for(let i=0;i<2;i++){const nd=d.clone().add(V(R()-.5,R()-.5,R()-.5).multiplyScalar(1.1)).normalize();
+      const q=p.clone().add(nd.multiplyScalar(2-depth*.3));E.push([p,q]);L[0].push(q);br(q,nd,depth+1)}})(V(0,0,0),V(-1,.2,0),0);
+  const s=pointsOf([V(0,0,0)],pm(2.6,0xff7a2a,.55));return stageFrom(L,E,s)},
+ perceptron(){const[L,E]=dense([5,1],6,1.8,3);const s=pointsOf([L[1][0]],pm(2.2,0xff7a2a,.5));return stageFrom(L,E,s)},
+ ann(){const[L,E]=dense([4,7,7,3],4.2,1.35,3.5,.8);return stageFrom(L,E)},
+ cnn(){const sizes=[7,5,4,3],L=[],E=[],grids=[];
+  sizes.forEach((n,i)=>{const g=[];for(let r=0;r<n;r++)for(let c=0;c<n;c++)g.push(V(i*4.3-6.5+(c-(n-1)/2)*.7*(1+i*.15),(r-(n-1)/2)*.7*(1+i*.15),-i*2.2+(R()-.5)*.2));grids.push({g,n});L.push(g)});
+  for(let i=0;i<3;i++){const A=grids[i],Bn=grids[i+1];A.g.forEach((a,k)=>{const r=k/A.n|0,c=k%A.n;E.push([a,Bn.g[Math.min(Bn.n-1,Math.floor(r*Bn.n/A.n))*Bn.n+Math.min(Bn.n-1,Math.floor(c*Bn.n/A.n))]])})}
+  const flat=grids[3].g.map(p=>V(p.x+4,p.y*.4,p.z));const fc=[...Array(6)].map((_,i)=>V(grids[3].g[0].x+5,(i-2.5)*.9,-6.6));
+  L.push(fc);fc.forEach(f=>grids[3].g.forEach((g,i)=>i%2===0&&E.push([g,f])));return stageFrom(L,E)},
+ rnn(){const T=6,L=[],E=[];
+  for(let t=0;t<T;t++){const x=(t-(T-1)/2)*3.3,z=(R()-.5)*1.5;L.push([V(x,-2.2,z),V(x,0,z),V(x,2.2,z)]);
+    E.push([L[t][0],L[t][1]],[L[t][1],L[t][2]]);if(t)E.push([L[t-1][1],L[t][1]],[L[t-1][1],L[t][1]])}
+  const loops=[];for(let t=0;t<T;t++){const c=L[t][1];for(let i=0;i<20;i++){const a=i/20*6.283,b=(i+1)/20*6.283;
+    E.push([V(c.x+Math.cos(a)*.55,c.y+.55+Math.sin(a)*.55,c.z),V(c.x+Math.cos(b)*.55,c.y+.55+Math.sin(b)*.55,c.z)])}}
+  return stageFrom(L,E)},
+ tf(){const L=[],E=[];for(let l=0;l<3;l++)L.push([...Array(7)].map((_,i)=>V((i-3)*1.7,(l-1)*2.8,-l*1.8)));
+  for(let l=0;l<2;l++)L[l].forEach(a=>L[l+1].forEach(b=>R()<.75&&E.push([a,b])));
+  L[0].forEach((a,i)=>i<6&&E.push([a,L[0][i+1]]));return stageFrom(L,E)}
+};
+const sm=t=>t*t*(3-2*t),N=PATH.length;
+// --- extra / enhanced builders ---
+const _cnn=B.cnn;B.cnn=()=>{const g=_cnn();
+ [[0xff4455,1],[0x44ff88,2],[0x4488ff,3]].forEach(([c,k])=>{const a=[];for(let r=0;r<7;r++)for(let q=0;q<7;q++)a.push(V(-6.5+(q-3)*.7+.3*k,(r-3)*.7-.3*k,-.7*k));g.add(pointsOf(a,pm(.32,c,.9)))});
+ const kb=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.1,2.1,.5)),new THREE.LineBasicMaterial({color:0xffd24a}));g.add(kb);
+ ups.push(()=>{const k=(performance.now()/350|0)%25;kb.position.set(-6.5+(k%5-2)*.7,(2-(k/5|0))*.7,0)});return g};
+const _tf=B.tf;B.tf=()=>{const g=_tf();
+ [0x6fd6ff,0xff9a52,0xb79bff].forEach(c=>{const E=[];for(let n=0;n<6;n++){const i=R()*7|0,j=R()*7|0;if(i===j)continue;
+  const a=V((i-3)*1.7,-2.8,0),b=V((j-3)*1.7,-2.8,0),m=a.clone().add(b).multiplyScalar(.5);m.y+=.5*Math.abs(i-j)+.5;m.z+=1;let pv=a;
+  for(let k=1;k<=16;k++){const u=k/16,w=1-u,q=V(w*w*a.x+2*u*w*m.x+u*u*b.x,w*w*a.y+2*u*w*m.y+u*u*b.y,w*w*a.z+2*u*w*m.z+u*u*b.z);E.push([pv,q]);pv=q}}
+  g.add(linesOf(E,lm(c,.85)))});
+ const w=[];for(let x=-6;x<6;x+=.2)w.push([V(x,-5.5+Math.sin(x*2)*.4,0),V(x+.2,-5.5+Math.sin((x+.2)*2)*.4,0)]);g.add(linesOf(w,lm(0x6fd6ff,.5)));return g};
+B.ae=()=>{const[L,E]=dense([8,5,2,5,8],3.4,1.1,3);return stageFrom(L,E,pointsOf(L[2],pm(2.6,0xb79bff,.6)))};
+B.diff=()=>{const g=new THREE.Group(),M=1600,tg=[],ns=[],pos=new Float32Array(M*3);
+ for(let i=0;i<M;i++){const a=i/M*38,r=.4+a*.18;tg.push(V(Math.cos(a)*r*(1+.08*R()),Math.sin(a)*r*(1+.08*R()),(R()-.5)*1.2));ns.push(V((R()-.5)*16,(R()-.5)*12,(R()-.5)*8))}
+ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));const p=new THREE.Points(geo,pm(.16,0xffb070,.9));p.frustumCulled=false;g.add(p);
+ ups.push(()=>{const m=diffM();for(let i=0;i<M;i++){pos[i*3]=ns[i].x+(tg[i].x-ns[i].x)*m;pos[i*3+1]=ns[i].y+(tg[i].y-ns[i].y)*m;pos[i*3+2]=ns[i].z+(tg[i].z-ns[i].z)*m}geo.attributes.position.needsUpdate=true});return g};
+
+// --- floating concept labels ---
+const tags=[];
+function label(txt,col){const c=document.createElement('canvas');c.width=320;c.height=64;const x=c.getContext('2d');x.font='500 28px "JetBrains Mono",monospace';x.fillStyle=col;x.shadowColor=col;x.shadowBlur=14;x.textAlign='center';x.fillText(txt,160,42);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,opacity:.8,depthWrite:false,blending:THREE.AdditiveBlending}));s.scale.set(6,1.2,1);return s}
+function addTerms(a,c,sx,sy,sz){a.forEach((t,k)=>{const s=label(t,['#6fd6ff','#ff9a52','#b79bff'][k%3]);s.position.set(c[0]+(R()-.5)*sx,c[1]+(R()-.5)*sy,c[2]+(R()-.5)*sz);s.userData={b:s.position.y,ph:R()*6};scene.add(s);tags.push(s)})}
+addTerms(['neocortex','Hebbian learning','synapse','neuroplasticity','LTP','hippocampus','connectome','backprop ≈ ?'],[0,-1,-8],16,8,8);
+
+const stages=[],outers=[],mob=innerWidth<=700;
+CAREER.forEach((c,i)=>{const a=PATH[i+1],o=new THREE.Group(),inner=B[c.key]();o.add(inner);
+ o.position.set(a[0]+(mob?0:c.side*5),a[1]+(mob?2.5:0),a[2]);o.scale.setScalar(mob?.55:.8);scene.add(o);stages.push(inner);outers.push(o);
+ addTerms(c.terms,[a[0],a[1],a[2]-2],30,16,14)});
+
+// loss landscape with gradient-descent ball
+const LS=new THREE.Group(),f=(x,y)=>.011*(x*x+y*y)+1.6*Math.sin(x*.45)*Math.cos(y*.45);
+{const geo=new THREE.PlaneGeometry(30,30,40,40),pa=geo.attributes.position;for(let i=0;i<pa.count;i++)pa.setZ(i,f(pa.getX(i),pa.getY(i)));
+ LS.add(new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x2a7fff,wireframe:true,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false})));
+ const ball=pointsOf([V(0,0,0)],pm(1.4,0xff7a2a));ball.frustumCulled=false;LS.add(ball);let bx=12,by=-9,st=0;
+ ups.push(()=>{if(++st%2)return;const e=.05,gx=(f(bx+e,by)-f(bx-e,by))/(2*e),gy=(f(bx,by+e)-f(bx,by-e))/(2*e);bx-=gx*.9;by-=gy*.9;
+  if(Math.hypot(gx,gy)<.02||st>500){bx=(R()-.5)*26;by=(R()-.5)*26;st=0}ball.position.set(bx,by,f(bx,by)+.4)});
+ LS.rotation.x=-1.15;LS.position.set(58,-102,-38);scene.add(LS)}
+
+// deep-space dust
+const d1=[],d2=[];for(let i=0;i<5000;i++)d1.push(V(-110+R()*240,-300+R()*310,-90+R()*105));
+for(let i=0;i<500;i++)d2.push(V(-110+R()*240,-300+R()*310,-90+R()*105));
+scene.add(pointsOf(d1,pm(.09,0x7fb6ff,.55)));scene.add(pointsOf(d2,pm(.22,0xff9a52,.5)));
+
+// --- camera journey ---
+const CP=PATH.map((a,i)=>i?V(a[0],a[1],a[2]+14):V(0,0,.5)),LP=PATH.map(a=>V(a[0],a[1],a[2]));
+const cC=new THREE.CatmullRomCurve3(CP,false,'catmullrom',.5),lC=new THREE.CatmullRomCurve3(LP,false,'catmullrom',.5);
+const camPos=V(0,0,8),lookS=V(0,0,0),prev=V(0,0,8);
+let started=false,flat=0,flatT=0,mx=0,my=0,spin=0,loadP=0,fovCur=60,bank=0;
+addEventListener('pointermove',e=>{mx=e.clientX/innerWidth-.5;my=e.clientY/innerHeight-.5});
+const modeBtn=document.getElementById('mode');
+modeBtn.onclick=()=>{flatT=flatT?0:1;document.body.classList.toggle('flat',!!flatT);modeBtn.textContent=flatT?'◈':'▦'};
+addEventListener('keydown',e=>{if(!started||diveIdx>=0)return;const s=Math.round(scrollY/innerHeight);
+ if(e.key==='ArrowDown'||e.key==='PageDown'){e.preventDefault();scrollTo({top:Math.min(N-1,s+1)*innerHeight,behavior:'smooth'})}
+ if(e.key==='ArrowUp'||e.key==='PageUp'){e.preventDefault();scrollTo({top:Math.max(0,s-1)*innerHeight,behavior:'smooth'})}
+ if(e.key==='2'||e.key==='3')modeBtn.click()});
+
+const loader=document.getElementById('loader'),bar=loader.querySelector('#bar i'),status=document.getElementById('status'),enter=document.getElementById('enter');
+const msgs=['igniting first neurons…','charting the constellations…','aligning synaptic orbits…','warming up the cortex…','ready for departure'];
+const lt=setInterval(()=>{loadP=Math.min(100,loadP+1.2+R()*2.4);bar.style.width=loadP+'%';tickCnt();status.textContent=msgs[Math.min(4,loadP/25|0)];
+ if(loadP>=100){clearInterval(lt);enter.classList.add('show')}},90);
+enter.onclick=()=>{started=true;spin=1;loader.classList.add('go');document.body.classList.add('hyper');setTimeout(()=>document.body.classList.remove('hyper'),2400);introFade=1;whoosh();
+ setTimeout(()=>{document.body.classList.remove('lock');document.getElementById('hud').classList.add('on')},2400)};
+
+const depth=document.getElementById('depth'),mc=document.getElementById('map').getContext('2d');
+function drawMap(){const w=144,h=240,X=x=>(x+60)/160*w,Y=y=>-y/290*h;mc.clearRect(0,0,w,h);mc.strokeStyle='rgba(111,214,255,.5)';mc.beginPath();
+ PATH.forEach((a,i)=>i?mc.lineTo(X(a[0]),Y(a[1])):mc.moveTo(X(a[0]),Y(a[1])));mc.stroke();
+ mc.fillStyle='#6fd6ff';PATH.forEach(a=>mc.fillRect(X(a[0])-2,Y(a[1])-2,4,4));
+ mc.fillStyle='#ff7a2a';mc.shadowColor='#ff7a2a';mc.shadowBlur=10;mc.beginPath();mc.arc(X(camPos.x),Y(camPos.y),5,0,6.3);mc.fill();mc.shadowBlur=0}
+// ---------- LIVE MATH (real computations, updated in real time) ----------
+const fm=(x,d=2)=>(x<0?'':' ')+x.toFixed(d),sig=x=>1/(1+Math.exp(-x)),vec=a=>'['+a.map(v=>fm(v)).join(',')+']';
+const spark=(a,lo,hi)=>a.map(v=>'▁▂▃▄▅▆▇█'[Math.max(0,Math.min(7,((v-lo)/(hi-lo)*7.99)|0))]).join('');
+const LIVE={},ST={v:-65,sp:0,h:[],fl:0,c:0};
+LIVE.neuron=t=>{const I=NI!=null?NI:2+1.2*Math.sin(t*1.5);let fire=0;for(let i=0;i<9;i++){ST.v+=(-(ST.v+65)+10*I)/10;if(ST.v>-50){ST.v=-65;ST.sp++;fire=1}}
+ ST.h.push(fire?-44:ST.v);if(fire){blip(2.2);PK[0]=1}ST.h=ST.h.slice(-42);if(fire)ST.fl=4;
+ return `<i>Leaky integrate-and-fire:  τ·dV/dt = −(V − Vrest) + R·I</i>\nτ=20ms  R=10MΩ  Vrest=−65mV  θ=−50mV\nI = <b>${I.toFixed(2)}</b> nA    V = <b>${ST.v.toFixed(1)}</b> mV\n${spark(ST.h,-66,-44)}\nspikes = <b>${ST.sp}</b>  ${ST.fl-->0?'⚡ V>θ → FIRE, reset to Vrest':''}`};
+LIVE.perceptron=t=>{const x=[Math.sin(t),Math.cos(t*1.3),Math.sin(t*.7)],w=[.8,-.5,.3],b=.1,z=w.reduce((s,wi,i)=>s+wi*x[i],b),y=sig(z);
+ return `<i>x</i> = ${vec(x)}\n<i>w</i> = ${vec(w)}   <i>b</i> = ${fm(b)}\nz = Σwᵢxᵢ + b = ${w.map((wi,i)=>fm(wi)+'·'+fm(x[i])).join(' +')} + ${fm(b)}\n  = <b>${fm(z,3)}</b>\ny = σ(z) = 1/(1+e^−z) = <b>${y.toFixed(3)}</b>   → class <b>${y>.5?1:0}</b>`};
+const AN={W1:[0,1,2].map(()=>[R()*2-1,R()*2-1]),b1:[0,0,0],W2:[R()-.5,R()-.5,R()-.5].map(v=>v*2),b2:0,ep:0,lh:[]},XOR=[[0,0,0],[0,1,1],[1,0,1],[1,1,0]];
+const fwd=x=>{const h=AN.W1.map((w,i)=>Math.tanh(w[0]*x[0]+w[1]*x[1]+AN.b1[i]));return[h,sig(AN.W2.reduce((s,w,i)=>s+w*h[i],AN.b2))]};
+function trainEp(lr){let L=0;XOR.forEach(([a,b,y])=>{const x=[a,b],[h,yh]=fwd(x);L+=-(y*Math.log(yh+1e-9)+(1-y)*Math.log(1-yh+1e-9));const dz=yh-y;
+ for(let i=0;i<3;i++){const dz1=dz*AN.W2[i]*(1-h[i]*h[i]);AN.W2[i]-=lr*dz*h[i];AN.W1[i][0]-=lr*dz1*x[0];AN.W1[i][1]-=lr*dz1*x[1];AN.b1[i]-=lr*dz1}AN.b2-=lr*dz});AN.ep++;return L/4}
+LIVE.ann=t=>{let L=0;for(let i=0;i<40;i++)L=trainEp(.5);AN.lh.push(L);AN.lh=AN.lh.slice(-40);
+ const[a,b,y]=XOR[(t*1.5|0)%4],[h,yh]=fwd([a,b]),dz=yh-y,Ls=-(y*Math.log(yh)+(1-y)*Math.log(1-yh)),mu=h.reduce((s,v)=>s+v,0)/3,va=h.reduce((s,v)=>s+(v-mu)**2,0)/3;
+ return `<i>Dense+tanh:</i> h = tanh(W₁x + b₁)    x=[${a},${b}]  target y=<b>${y}</b>\nh = ${vec(h)}\n<i>Sigmoid out:</i> ŷ = σ(W₂·h + b₂) = <b>${yh.toFixed(3)}</b>\n<i>BCE loss:</i> L = −[y·ln ŷ + (1−y)·ln(1−ŷ)] = <b>${Ls.toFixed(3)}</b>\n<i>Backprop:</i> ∂L/∂z₂ = ŷ−y = ${fm(dz,3)}\n∂L/∂W₂ = (ŷ−y)·h = ${vec(h.map(v=>v*dz))}\n<i>SGD:</i> W ← W − η·∂L/∂W   (η=0.5)\n<i>BatchNorm:</i> ĥ=(h−μ)/√(σ²+ε) = ${vec(h.map(v=>(v-mu)/Math.sqrt(va+1e-5)))}\nepoch <b>${AN.ep}</b>  ${spark(AN.lh,0,.8)}  loss=<b>${L.toFixed(4)}</b>`};
+const IMG=[...Array(7)].map((_,r)=>[...Array(7)].map((_,c)=>(c<3?8:1)+((r*3+c*5)%3))),KER=[[1,0,-1],[2,0,-2],[1,0,-1]];
+LIVE.cnn=()=>{const k=(performance.now()/350|0)%25,r0=k/5|0,c0=k%5;let s=0;const rows=[0,1,2].map(i=>{const pr=[0,1,2].map(j=>IMG[r0+i][c0+j]);pr.forEach((v,j)=>s+=v*KER[i][j]);return ` ${pr.join('  ')}     ×    ${KER[i].map(v=>(v<0?'':' ')+v).join(' ')}`});
+ return `<i>Conv2D:</i> (X∗K)[r,c] = Σᵢ Σⱼ X[r+i,c+j]·K[i,j]\n<i>patch @(${r0},${c0})        Sobel-x kernel</i>\n${rows.join('\n')}\nΣ = <b>${s}</b>   → ReLU = max(0,Σ) = <b>${Math.max(0,s)}</b>\n<i>out size</i> = ⌊(7−3+2·0)/1⌋+1 = 5 → 5×5 feature map\n<i>MaxPool 2×2:</i> max of window → halves resolution`};
+const RS={c:0,h:0};
+LIVE.rnn=t=>{let h=0,g=1;const rows=[];for(let i=1;i<=6;i++){const x=Math.sin(t*1.5+i*1.2);h=Math.tanh(.6*h+1.1*x);g*=.6*(1-h*h);if(i>2)rows.push(`t=${i}  x=${fm(x)}  h=<b>${fm(h)}</b>`)}
+ const x=Math.sin(t*2),hp=RS.h,fg=sig(.5*x+.4*hp-.1),ig=sig(.7*x-.3*hp),og=sig(.2*x+.8*hp),gt=Math.tanh(.9*x+.1*hp);RS.c=fg*RS.c+ig*gt;RS.h=og*Math.tanh(RS.c);
+ return `<i>RNN:</i> hₜ = tanh(0.6·hₜ₋₁ + 1.1·xₜ)\n${rows.join('\n')}\n∂h₆/∂h₀ = Π wₕ(1−hₜ²) = <b>${g.toExponential(1)}</b> ← vanishing gradient\n<i>LSTM:</i> f=σ(·)=<b>${fg.toFixed(2)}</b> i=<b>${ig.toFixed(2)}</b> o=<b>${og.toFixed(2)}</b> g̃=tanh(·)=${fm(gt)}\ncₜ = f·cₜ₋₁ + i·g̃ = <b>${fm(RS.c)}</b>   hₜ = o·tanh(cₜ) = <b>${fm(RS.h)}</b>`};
+const WE=[[.6,-.4,.3,.2],[-.2,.5,.4,-.6]];
+LIVE.ae=t=>{const x=[Math.sin(t),Math.cos(t*.8),Math.sin(t*1.7),Math.cos(t*.5)],z=WE.map(r=>Math.tanh(r.reduce((s,w,i)=>s+w*x[i],0))),xh=[0,1,2,3].map(i=>z[0]*WE[0][i]+z[1]*WE[1][i]),mse=x.reduce((s,v,i)=>s+(v-xh[i])**2,0)/4,kl=z.reduce((s,m)=>s+.5*(m*m+.64-Math.log(.64)-1),0);
+ return `<i>Encoder:</i> z = tanh(Wₑx)   x ∈ ℝ⁴ → z ∈ ℝ²\nx = ${vec(x)}\nz = <b>${vec(z)}</b>   ← latent code\n<i>Decoder:</i> x̂ = W_d·z = ${vec(xh)}\n<i>Recon:</i> ‖x−x̂‖²/4 = <b>${mse.toFixed(3)}</b>\n<i>VAE KL</i> (σ=0.8): ½Σ(μ²+σ²−lnσ²−1) = <b>${kl.toFixed(3)}</b>\nELBO ≈ −recon − β·KL = <b>${(-mse-.5*kl).toFixed(3)}</b>`};
+LIVE.tf=t=>{const T=['the','brain','learns','fast'],X=T.map((_,i)=>[0,1,2,3].map(j=>Math.sin(i*1.7+j*2.1+t*.6))),W=a=>[0,1,2,3].map(i=>[0,1,2,3].map(j=>((i*7+j*3+a)%5-2)/2)),Wq=W(1),Wk=W(3),mul=(v,M)=>M[0].map((_,j)=>v.reduce((s,x,i)=>s+x*M[i][j],0)),Q=X.map(v=>mul(v,Wq)),K=X.map(v=>mul(v,Wk));
+ const A=Q.map(q=>{const s=K.map(k=>q.reduce((a,x,i)=>a+x*k[i],0)/2),m=Math.max(...s),e=s.map(v=>Math.exp(v-m)),z=e.reduce((a,b)=>a+b,0);return e.map(v=>v/z)});
+ return `<i>Attention(Q,K,V) = softmax(QKᵀ/√dₖ)·V     dₖ=4</i>\n          ${T.map(w=>w.padEnd(7)).join('')}\n${A.map((r,i)=>T[i].padEnd(8)+r.map(p=>`<span style="background:rgba(255,154,82,${(p*.9).toFixed(2)})"> ${p.toFixed(2)} </span>`).join('')).join('\n')}\nrows sum to 1 · "<b>${T[1]}</b>" attends most to "<b>${T[A[1].indexOf(Math.max(...A[1]))]}</b>"\nout₁ = Σⱼ A₁ⱼ·vⱼ  ·  PE(pos,2i)=sin(pos/10000^(2i/d))`};
+LIVE.diff=()=>{const now=performance.now(),m=diffM(),up=DIFFO!=null?false:Math.cos(now/1800)>0,ab=Math.min(.999,Math.max(.001,m)),x0=1,eps=.7,xt=Math.sqrt(ab)*x0+Math.sqrt(1-ab)*eps,eh=eps+.04*Math.sin(now/300),x0h=(xt-Math.sqrt(1-ab)*eh)/Math.sqrt(ab);
+ return `<i>Forward:</i> xₜ = √ᾱₜ·x₀ + √(1−ᾱₜ)·ε,   ε~𝒩(0,I)\nt = <b>${Math.round((1-m)*1000)}</b>/1000   ᾱₜ = <b>${ab.toFixed(3)}</b>   ${up?'▲ reverse: denoising':'▼ forward: adding noise'}\nxₜ = √${ab.toFixed(2)}·${x0} + √${(1-ab).toFixed(2)}·${eps} = <b>${xt.toFixed(3)}</b>\n<i>Network predicts</i> ε̂ = ε_θ(xₜ,t) = ${eh.toFixed(3)}\n<i>Recover:</i> x̂₀ = (xₜ − √(1−ᾱₜ)·ε̂)/√ᾱₜ = <b>${x0h.toFixed(3)}</b>\n<i>Loss:</i> ‖ε − ε̂‖² = <b>${((eps-eh)**2).toFixed(5)}</b>`};
+let lastL=0;
+function liveUpdate(a,t){if(!started||a<1||a>CAREER.length)return;const n=performance.now();if(n-lastL<90)return;lastL=n;const key=CAREER[a-1].key,el=document.getElementById('live-'+key);if(el&&LIVE[key])el.innerHTML=LIVE[key](n/1000)}
+function scramble(el){const h=el.querySelector('h1,h2');if(!h)return;const tx=h.dataset.t||(h.dataset.t=h.textContent);let n=0;const id=setInterval(()=>{h.textContent=tx.split('').map((c,i)=>i<n||c===' '?c:'01ΣΔ∇λ∂θ'[R()*9|0]).join('');n+=.7;if(n>=tx.length){h.textContent=tx;clearInterval(id)}},30)}
+// neural spark trail following the pointer
+const TRN=50,trP=new Float32Array(TRN*3),trG=new THREE.BufferGeometry(),trH=[];trG.setAttribute('position',new THREE.BufferAttribute(trP,3));
+const trO=new THREE.Points(trG,pm(.4,0xffa060,.8));trO.frustumCulled=false;scene.add(trO);
+function trail(){const p=V(mx*2,-my*2,.5).unproject(camera);p.sub(camera.position).normalize().multiplyScalar(11).add(camera.position);trH.unshift(p);if(trH.length>TRN)trH.pop();
+ trH.forEach((q,i)=>{trP[i*3]=q.x+(R()-.5)*.05*i;trP[i*3+1]=q.y+(R()-.5)*.05*i;trP[i*3+2]=q.z});for(let i=trH.length;i<TRN;i++){trP[i*3]=trP[i*3+1]=trP[i*3+2]=1e4}trG.attributes.position.needsUpdate=true}
+// ---------- STAGE DETAIL VIEWS (cinematic dive) ----------
+let curA=0,diveIdx=-1,diveT=0,dRoll=0,detailOpen=false;
+// figs: [type, caption, optional data: URI image]  — supply your own screenshots as data URIs if you like
+const DETAIL={
+neuron:{lead:"Where the signal starts. My degree in Computer Science and Design Engineering at RGIPT is the base layer that every internship, project, paper and leadership role builds on.",figs:[["trace","Leaky integrate-and-fire membrane potential"],["heat","Synaptic weight matrix after Hebbian updates"],["seq","Spike-rate coding across three neurons"]],proj:[["Bachelor of Technology — Computer Science and Design Engineering", "Rajiv Gandhi Institute of Petroleum Technology, Jais, Amethi, India.", "Aug 2023 – Jul 2027"]],learn:["A degree in progress — depth added through internships, research and leadership", "Engineering plus design thinking shapes how I build AI products", "Everything else on this page grew from this foundation"]},
+perceptron:{lead:"Every perceptron is weights and a bias. These are mine: the languages, libraries, platforms and techniques I use, grouped exactly as on my résumé.",figs:[["act","Sigmoid, tanh and ReLU activations"],["latent","Two classes and a learned decision boundary"],["loss","Training error versus epochs"]],proj:[["Programming", "Python, Java, C/C++, JavaScript, Golang", "5 languages"], ["Frameworks & Libraries", "Flask, Django, TensorFlow, PyTorch, Keras, Hugging Face, NumPy, Pandas, Scikit-Learn, OpenCV, NLTK, spaCy", "12 frameworks & libraries"], ["Big Data & Databases", "Hadoop, Spark, MongoDB, MySQL", "4 technologies"], ["Tools & Platforms", "Docker, Jenkins, Git, Linux, Jupyter, PyCharm, VS Code", "7 tools"], ["ML/AI Techniques", "Federated Learning, Multi-agent Orchestration, Schema-aware Retrieval, Prompt Conditioning, A/B Testing, Statistical Validation", "6 techniques"], ["Leadership Principles", "Deliver Results, Dive Deep, Invent and Simplify, Bias for Action, Earn Trust", "5 principles"]],learn:["Breadth across languages, frameworks, data and tooling", "Techniques like federated learning and agentic RAG sit on top of solid engineering", "Leadership principles guide how I work"]},
+ann:{lead:"Real-world layers: each internship added depth — from data engineering, to agentic RAG with A/B-tested accuracy gains, to Vision Transformers on seismic data. (My research internship at IEEE – Curtin University is under Research.)",figs:[["loss","Train vs validation loss — overfitting onset"],["roc","ROC curve on held-out data"],["conf","Normalised confusion matrix"]],proj:[["SLB, Gurgaon — Data Scientist Intern (May 2026 – Jul 2026)", "Built an Encoder-Decoder seismic pipeline with GFM memory and cross-tiling Vision Transformers, recovering 40-60% of trace data (SNR: 24.3dB, SSIM: 0.95, MSE: 0.002) while beating GAN/U-Net throughput by 41%.", "40–60% trace data recovered · +41% throughput"], ["FOSSEE, IIT Bombay, Mumbai — Software Development Engineering Intern (May 2025 – Jul 2025)", "Engineered modular SLM-based EDA validation using Ollama, agentic RAG, and NLP orchestration achieving 89% accuracy, F1: 0.81, with 1.3s latency. Enhanced circuit query accuracy from 62% to 89% by implementing schema-aware retrieval, vision-assisted parsing, and prompt-conditioned inference; validated via statistically significant A/B testing (p < 0.01).", "89% acc · F1 0.81 · 1.3s · 62% → 89% (p < 0.01)"], ["Sambin Technologies, Remote — Data Engineering Intern (Jun 2024 – Aug 2024)", "Automated extraction and structuring of 30K+ items using Selenium and BeautifulSoup, enabling scalable ML pipelines. Streamlined data wrangling workflows, reducing manual effort by 62% and increasing efficiency by 77%.", "30K+ items · −62% manual effort · +77% efficiency"]],learn:["Good models start with well-structured data", "Evaluation and statistics make AI claims credible", "Reconstruction and retrieval quality need several metrics, not one"]},
+cnn:{lead:"Three builds, three kinds of intelligence: reading documents, seeing faces, and chatting offline.",figs:[["conv","Feature maps from the first conv layer (edges)"],["heat","Grad-CAM style saliency map"],["conf","Per-class accuracy on validation set"]],proj:[["Speak Tutorial: Quantized RAG for Tutorial Generation (Jul 2025 – Sep 2025)", "Implemented agentic RAG with multi-vector quantization to convert PDFs into structured tutorials. Delivered 89% accuracy, BLEU: 72.4, ROUGE-L: 0.81, nDCG@10: 0.92 with 3.6s p95 latency across 20M+ vectors.", "89% acc · nDCG@10 0.92 · 20M+ vectors"], ["SARVADRISHTHI: Deep Learning & Blockchain (Aug 2024 – Dec 2024)", "Implemented CNN-powered YOLOv8 for real-time face recognition (92.3% mAP, 85.6% precision). Augmented training dataset by 30% using GAN-based Dlib techniques.", "92.3% mAP · 85.6% precision · +30% data"], ["LocoCHAT: Offline ChatGPT (Jun 2024 – Jul 2024)", "Developed offline assistant with Llama3 + Ollama, leveraging prompt orchestration and PQ-based embedding retrieval. Achieved 92.3% accuracy, 0.87 MRR, and 1.4s p95 latency over 10M+ quantized vectors.", "92.3% acc · 0.87 MRR · 10M+ vectors"]],learn:["Detection quality depends as much on data as on architecture", "Quantization trades a little precision for large speed and memory gains", "Report retrieval with nDCG, MRR and p95 latency — not vibes"]},
+rnn:{lead:"Language is a sequence, and sequence models taught me about memory. At IEEE – Curtin University I researched privacy-preserving federated sentiment analysis.",figs:[["seq","Hidden-state trajectories over time"],["loss","Sequence loss with gradient clipping"],["heat","LSTM gate activation heatmap"]],proj:[["Federated sentiment-analysis pipeline", "Developed a federated sentiment analysis pipeline using DistilBERT, outperforming BERT/RoBERTa.", "F1 0.91 · ROC-AUC 0.94"], ["Classification quality", "Precision 0.90 and recall 0.92 on the sentiment task.", "P 0.90 · R 0.92"], ["Inference latency", "Reduced inference latency through 5-fold cross-validation.", "−52% latency"]],learn:["Smaller distilled models can beat larger ones when tuned well", "Federated learning keeps data local while models learn globally", "Cross-validation guards against fooling yourself"]},
+ae:{lead:"Publishing is compression with meaning intact: engineering work distilled into one paper on making circuit design and debugging accessible with an offline, open-source AI assistant.",figs:[["latent","2D latent space — clusters emerge"],["loss","ELBO terms: reconstruction and KL"],["conv","Reconstructions versus inputs"]],proj:[["An Offline AI Assistant for eSim: Accessible, Open-Source Circuit Design and Debugging", "Presented at Open Opportunity Source Conference 3.0, IIT Kanpur, 2025. <a href=\"https://www.researchgate.net/publication/395407803_An_Offline_AI_Assistant_for_eSim_Easier_Accessible_Open-Source_Circuit_Design_and_Debugging\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--cy)\">Read on ResearchGate ↗</a>", "Conference paper · 2025"]],learn:["Open-source tools lower the barrier to entry", "Writing forces precise claims and honest evaluation", "Offline-first design makes AI accessible"]},
+tf:{lead:"Attention is earned. These recognitions, from mentorships to national and international hackathons, mark where my work stood out.",figs:[["heat","Multi-head self-attention map"],["loss","Pre-training loss follows a scaling curve"],["latent","Token embeddings projected to 2D"]],proj:[["Linux Foundation Mentorship (LFX 2025)", "Optimized Hyperledger BiniBFT block finality, reducing time by 61%.", "−61% finality time"], ["Amazon ML Summer School 2025", "Selected among top 3,000 recipients nationwide from 60K+ participants.", "Top 3,000 of 60K+"], ["SPG-SLB Hackathon Winner (2nd Runner up) 2025", "Top-tier finalist from over 600+ international applicants.", "2nd runner-up · 600+ applicants"], ["HMEL Quest Hackathon Winner (2nd) 2025", "Outperformed 400+ applicants in a national-level selection.", "2nd place · 400+ applicants"], ["Smart India Hackathon 2024 Finalist", "Ranked in top 1.4% among 500K+ participants.", "Top 1.4% of 500K+"], ["Google AI for Impact Hackathon", "Top 95 in Asia Pacific among 22.9K+ developers.", "Top 95 APAC · 22.9K+"]],learn:["Competitions teach you to ship under pressure", "Mentorship raises engineering rigor", "Measured, reproducible gains matter more than demos"]},
+diff:{lead:"Leadership turns noise into structure: organising people, events and teams so that skills compound.",figs:[["noise","Noise → structure across denoising steps"],["loss","Denoising score-matching loss"],["heat","Cross-attention conditioning map"]],proj:[["Secretary, Computer Society — IEEE RGIPT (Nov 2025 – Present)", "Mentored 50+ members, organized ML workshops and hackathons, fostering technical skill development.", "50+ members mentored"], ["Technical Officer, AIChE-RGIPT (Dec 2025 – Present)", "Led 20+ member technical team to build the official website, attracting global engagement.", "20+ member team"]],learn:["Mentoring multiplies impact", "Workshops and hackathons build a learning culture", "Shipping a website with a team teaches coordination"]}};
+const G={
+trace:(c,w,h)=>{c.strokeStyle='#6fd6ff';c.lineWidth=2;c.beginPath();for(let x=0;x<w;x++){const u=(x/w*6)%1,y=u>.94?.08:.82-.42*Math.pow(u,.6);c[x?'lineTo':'moveTo'](x,y*h)}c.stroke();c.strokeStyle='#ff7a2a';c.setLineDash([6,6]);c.beginPath();c.moveTo(0,.4*h);c.lineTo(w,.4*h);c.stroke()},
+act:(c,w,h)=>{c.lineWidth=2.5;[['#6fd6ff',x=>1/(1+Math.exp(-x))],['#ff9a52',x=>(Math.tanh(x)+1)/2],['#b79bff',x=>Math.min(1,Math.max(0,x)/3)]].forEach(([col,f])=>{c.strokeStyle=col;c.beginPath();for(let i=0;i<w;i++){const x=(i/w-.5)*8;c[i?'lineTo':'moveTo'](i,(.9-f(x)*.8)*h)}c.stroke()})},
+loss:(c,w,h)=>{[['#6fd6ff',0],['#ff9a52',1]].forEach(([col,v])=>{c.strokeStyle=col;c.lineWidth=2.5;c.beginPath();for(let i=0;i<w;i++){const x=i/w,y=.12+.7*Math.exp(-x*5)+(v?Math.max(0,x-.55)*.5:0)+(R()-.5)*.02;c[i?'lineTo':'moveTo'](i,(1-y)*h*.9+h*.05)}c.stroke()})},
+conv:(c,w,h)=>{const n=14,m=9,cw=w/n,ch=h/m;for(let r=0;r<m;r++)for(let q=0;q<n;q++){const v=Math.abs(Math.sin(q*.9+r*.3)*Math.cos(r*.8-q*.2));c.fillStyle=`rgba(${80+v*175|0},${120+v*90|0},255,${.15+v*.85})`;c.fillRect(q*cw+1,r*ch+1,cw-2,ch-2)}},
+heat:(c,w,h)=>{const n=10,cw=w/n,ch=h/n;for(let r=0;r<n;r++)for(let q=0;q<n;q++){const v=Math.exp(-Math.abs(r-q)*.6)*(.5+R()*.5)*(1+(r*q%3===0?.4:0));c.fillStyle=`rgba(255,154,82,${Math.min(1,v)})`;c.fillRect(q*cw+1,r*ch+1,cw-2,ch-2)}},
+latent:(c,w,h)=>{[[.28,.35,'#6fd6ff'],[.7,.4,'#ff9a52'],[.5,.75,'#b79bff']].forEach(([cx,cy,col])=>{c.fillStyle=col;for(let i=0;i<90;i++){const a=R()*6.28,r=Math.sqrt(-2*Math.log(R()+1e-6))*.06;c.beginPath();c.arc((cx+Math.cos(a)*r)*w,(cy+Math.sin(a)*r)*h,3,0,6.3);c.fill()}})},
+seq:(c,w,h)=>{[['#6fd6ff',1],['#ff9a52',1.7],['#b79bff',2.6]].forEach(([col,f],j)=>{c.strokeStyle=col;c.lineWidth=2;c.beginPath();for(let i=0;i<w;i++){const x=i/w;c[i?'lineTo':'moveTo'](i,h*(.5+.32*Math.tanh(2*Math.sin(x*6*f+j))*Math.exp(-x*(.6+j*.5))))}c.stroke()})},
+roc:(c,w,h)=>{c.strokeStyle='#6fd6ff';c.lineWidth=3;c.beginPath();for(let i=0;i<=w;i++){c[i?'lineTo':'moveTo'](i,(1-Math.pow(i/w,.12))*h*.9+h*.05)}c.stroke();c.strokeStyle='#556';c.setLineDash([5,5]);c.beginPath();c.moveTo(0,h*.95);c.lineTo(w,h*.05);c.stroke()},
+conf:(c,w,h)=>{[[.93,.07],[.06,.94]].forEach((r,i)=>r.forEach((v,j)=>{c.fillStyle=`rgba(${i===j?'255,122,42':'111,214,255'},${.15+v*.8})`;c.fillRect(j*w/2+6,i*h/2+6,w/2-12,h/2-12);c.fillStyle='#fff';c.font='600 34px sans-serif';c.textAlign='center';c.fillText(v.toFixed(2),j*w/2+w/4,i*h/2+h/4+12)}))},
+noise:(c,w,h)=>{for(let s=0;s<5;s++){const m=s/4;for(let i=0;i<260;i++){const a=i/260*30,r=.35+a*.02,tx=Math.cos(a)*r*h*.3+(s+.5)*w/5,ty=Math.sin(a)*r*h*.3+h/2,nx=(s+R())*w/5,ny=R()*h;c.fillStyle=`rgba(255,${150+m*60|0},${80+m*100|0},.85)`;c.fillRect(nx+(tx-nx)*m,ny+(ty-ny)*m,2.2,2.2)}}}};
+function drawFig(cv){const c=cv.getContext('2d'),w=cv.width,h=cv.height,g=c.createLinearGradient(0,0,w,h);g.addColorStop(0,'#071327');g.addColorStop(1,'#0b0a1c');c.fillStyle=g;c.fillRect(0,0,w,h);c.strokeStyle='rgba(111,214,255,.09)';c.lineWidth=1;for(let i=1;i<10;i++){c.beginPath();c.moveTo(i*w/10,0);c.lineTo(i*w/10,h);c.moveTo(0,i*h/10);c.lineTo(w,i*h/10);c.stroke()}c.save();G[cv.dataset.g](c,w,h);c.restore()}
+const warp=()=>{const e=document.getElementById('warp');e.classList.remove('fl');void e.offsetWidth;e.classList.add('fl')};
+function openDetail(i){const c=CAREER[i],d=DETAIL[c.key],el=document.getElementById('detail');let n=0;const rv=()=>`style="animation-delay:${(n++*.07).toFixed(2)}s"`;
+ el.innerHTML=`<div class="dwrap"><button class="btn" id="dclose">✕ Surface</button><div class="tag rv" ${rv()}>${c.tag} · ${c.when}</div><h1 class="rv" ${rv()}>${c.title}</h1><p class="rv" ${rv()} style="max-width:720px;font-size:17px">${d.lead}</p><div class="eq rv" ${rv()}>${c.eq}</div><h3 class="tag rv" ${rv()}>Figures</h3><div class="dgrid">${d.figs.map((f,j)=>`<figure class="rv" ${rv()}>${f[2]?`<img src="${f[2]}" alt="">`:`<canvas data-g="${f[0]}" width="520" height="320"></canvas>`}<figcaption>Fig ${j+1} — ${f[1]}</figcaption></figure>`).join('')}</div>${c.key==='ann'?`<h3 class="tag rv" ${rv()}>Train it yourself</h3><figure class="rv" ${rv()}><canvas id="play" width="640" height="360" style="cursor:crosshair"></canvas><figcaption>Click = orange class · Shift / right-click = blue class · a live MLP (2→8→8→1, tanh, SGD) learns the decision boundary in your browser <button class="btn" id="pclr" style="padding:4px 12px;margin:0 0 0 8px">clear</button></figcaption></figure>`:''}<h3 class="tag rv" ${rv()}>Projects</h3><div class="dgrid">${d.proj.map(p=>`<div class="proj rv" ${rv()}><b>${p[0]}</b><p>${p[1]}</p><span class="m">▸ ${p[2]}</span></div>`).join('')}</div><h3 class="tag rv" ${rv()}>What I learned</h3><ul class="rv" ${rv()}>${d.learn.map(l=>`<li>${l}</li>`).join('')}</ul><div class="chips rv" ${rv()}>${c.chips.map(x=>`<span>${x}</span>`).join('')}</div><div class="rv" ${rv()} style="margin-top:26px">${i>0?'<button class="btn" data-go="-1">← Previous stage</button>':''}${i<CAREER.length-1?'<button class="btn" data-go="1">Next stage →</button>':''}</div></div>`;
+ el.querySelectorAll('canvas').forEach(cv=>{try{drawFig(cv)}catch(e){}});el.querySelector('#dclose').onclick=closeDetail;el.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>hop(i+ +b.dataset.go));el.scrollTop=0;detailOpen=true;el.classList.add('open');if(c.key==='ann')try{initPlay()}catch(e){}}
+function initPlay(){const cv=document.getElementById('play');if(!cv)return;const c=cv.getContext('2d'),W=cv.width,H=cv.height,S=[2,8,8,1];let pts=[[.3,.3,0],[.7,.7,0],[.3,.7,1],[.7,.3,1]];
+ const net=[0,1,2].map(l=>({W:[...Array(S[l+1])].map(()=>[...Array(S[l])].map(()=>(R()-.5)*1.6)),b:Array(S[l+1]).fill(0)}));
+ const fw=x=>{const a=[x];net.forEach((L,l)=>{const p=a[l],z=L.W.map((w,i)=>w.reduce((s,v,j)=>s+v*p[j],L.b[i]));a.push(l<2?z.map(Math.tanh):z.map(sig))});return a};
+ const step=()=>{const[x,y,t]=pts[R()*pts.length|0],a=fw([x*2-1,y*2-1]);let d=[a[3][0]-t];for(let l=2;l>=0;l--){const L=net[l],p=a[l],o=a[l+1],dz=l===2?d:d.map((v,i)=>v*(1-o[i]*o[i])),nd=p.map(()=>0);L.W.forEach((w,i)=>w.forEach((v,j)=>{nd[j]+=v*dz[i];w[j]-=.1*dz[i]*p[j]}));L.b.forEach((_,i)=>L.b[i]-=.1*dz[i]);d=nd}};
+ const add=(e,k)=>{e.preventDefault();const r=cv.getBoundingClientRect();pts.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height,k])};
+ cv.onclick=e=>add(e,e.shiftKey?1:0);cv.oncontextmenu=e=>add(e,1);document.getElementById('pclr').onclick=()=>{pts=[]};
+ const loop=()=>{if(!document.body.contains(cv)||!detailOpen)return;if(pts.length)for(let i=0;i<30;i++)step();c.fillStyle='#050912';c.fillRect(0,0,W,H);
+  for(let gy=0;gy<18;gy++)for(let gx=0;gx<32;gx++){const p=fw([(gx+.5)/32*2-1,(gy+.5)/18*2-1])[3][0];c.fillStyle=p>.5?`rgba(111,214,255,${(p-.5)*1.1})`:`rgba(255,122,42,${(.5-p)*1.1})`;c.fillRect(gx*20,gy*20,20,20)}
+  pts.forEach(([x,y,t])=>{c.fillStyle=t?'#6fd6ff':'#ff7a2a';c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.arc(x*W,y*H,7,0,6.3);c.fill();c.stroke()});requestAnimationFrame(loop)};loop()}
+function dive(i){if(diveIdx>=0||detailOpen)return;diveIdx=i;diveT=performance.now();document.body.classList.add('diving','lock');try{whoosh()}catch(e){}setTimeout(()=>{warp();try{openDetail(i)}catch(e){console.error(e);const el=document.getElementById('detail');el.classList.add('open');detailOpen=true}},1900)}
+function hop(j){if(j<0||j>=CAREER.length)return;document.getElementById('detail').classList.remove('open');detailOpen=false;diveIdx=j;whoosh();scrollTo({top:(j+1)*innerHeight,behavior:'instant'});setTimeout(()=>{warp();try{openDetail(j)}catch(e){console.error(e)}},1900)}
+function closeDetail(){document.getElementById('detail').classList.remove('open');detailOpen=false;diveIdx=-1;warp();whoosh(.45);setTimeout(()=>document.body.classList.remove('diving','lock'),900)}
+const ray=new THREE.Raycaster();
+function hit(e){if(!started||curA<1||curA>CAREER.length||diveIdx>=0)return false;ray.setFromCamera({x:e.clientX/innerWidth*2-1,y:-(e.clientY/innerHeight*2-1)},camera);return ray.ray.distanceToPoint(outers[curA-1].position)<7}
+addEventListener('click',e=>{if(e.target.closest('.card,#nav,#mode,#detail,button,a'))return;if(hit(e))dive(curA-1)});
+let hl=0;addEventListener('pointermove',e=>{const n=performance.now();if(n-hl<120)return;hl=n;document.body.style.cursor=hit(e)?'pointer':''});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&detailOpen)closeDetail()});
+// ================= SOUND DESIGN v2: soothing generative ambience (muted by default) =================
+let AC=null,sndOn=false,lastB=0,dc=0;const dr={base:50,ci:0},PENT=[0,2,4,7,9],CH=[[0,7,14,16],[-3,4,7,13],[-7,0,4,7],[-5,2,9,11]],mid=n=>440*Math.pow(2,(n-69)/12);
+function initAudio(){AC=new (window.AudioContext||window.webkitAudioContext)();const m=AC.createGain();m.gain.value=0;m.connect(AC.destination);dr.m=m;
+ const len=AC.sampleRate*4.5,ir=AC.createBuffer(2,len,AC.sampleRate);for(let c=0;c<2;c++){const d=ir.getChannelData(c);for(let i=0;i<len;i++)d[i]=(R()*2-1)*Math.pow(1-i/len,2.6)}
+ const rv=AC.createConvolver();rv.buffer=ir;const rg=AC.createGain();rg.gain.value=.9;rv.connect(rg);rg.connect(m);dr.rv=rv;
+ const dry=AC.createGain();dry.gain.value=.55;dry.connect(m);dr.dry=dry;
+ const dl=AC.createDelay(2);dl.delayTime.value=.62;const fb=AC.createGain();fb.gain.value=.36;const dlp=AC.createBiquadFilter();dlp.type='lowpass';dlp.frequency.value=1800;dl.connect(dlp);dlp.connect(fb);fb.connect(dl);dlp.connect(rv);dr.dl=dl;
+ const lp=AC.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1000;lp.Q.value=.5;lp.connect(dry);lp.connect(rv);dr.lp=lp;
+ dr.voices=[0,1,2,3].map(()=>{const mix=AC.createGain();mix.gain.value=0;mix.connect(lp);const a=AC.createOscillator(),b=AC.createOscillator(),bg=AC.createGain();a.type='sine';b.type='triangle';b.detune.value=7;bg.gain.value=.3;a.connect(mix);b.connect(bg);bg.connect(mix);a.start();b.start();mix.gain.setTargetAtTime(.16,AC.currentTime,3);return{a,b}});
+ const nl=AC.sampleRate*4,nb=AC.createBuffer(1,nl,AC.sampleRate),d=nb.getChannelData(0);let l0=0;for(let i=0;i<nl;i++){l0=(l0+.02*(R()*2-1))/1.02;d[i]=l0*3.2}dr.nb=nb;
+ const ns=AC.createBufferSource();ns.buffer=nb;ns.loop=true;const nf=AC.createBiquadFilter();nf.type='lowpass';nf.frequency.value=480;const ng=AC.createGain();ng.gain.value=.07;
+ const lf=AC.createOscillator(),lg=AC.createGain();lf.frequency.value=.09;lg.gain.value=.05;lf.connect(lg);lg.connect(ng.gain);lf.start();ns.connect(nf);nf.connect(ng);ng.connect(dry);ns.start();dr.nf=nf;
+ retune(3);setInterval(()=>{if(sndOn){dr.ci=(dr.ci+1)%4;retune(3)}},16000);setInterval(()=>{if(sndOn&&R()<.7)note(.9)},3800)}
+function retune(tc=1.6){const ch=CH[dr.ci],t=AC.currentTime;dr.voices.forEach((v,k)=>{const f=mid(dr.base+ch[k]);v.a.frequency.setTargetAtTime(f,t,tc);v.b.frequency.setTargetAtTime(f,t,tc)})}
+document.getElementById('snd').onclick=e=>{if(!AC)initAudio();sndOn=!sndOn;AC.resume();dr.m.gain.setTargetAtTime(sndOn?.26:0,AC.currentTime,sndOn?1.5:.4);e.currentTarget.textContent=sndOn?'🔊':'🔇'};
+function droneUpdate(){if(!sndOn||!AC||++dc%12)return;const t=Math.max(0,Math.min(1,-camPos.y/285)),n=AC.currentTime;dr.base=50-10*t;dr.lp.frequency.setTargetAtTime(1100-700*t+flat*500,n,.8);dr.nf.frequency.setTargetAtTime(520-300*t,n,.8);retune()}
+function note(v=1){if(!sndOn||!AC)return;const t=AC.currentTime,f=mid(dr.base+12+PENT[R()*5|0]+(R()<.4?12:0)),g=AC.createGain(),p=AC.createStereoPanner?AC.createStereoPanner():null;
+ [[1,1],[2,.25],[3.01,.08]].forEach(([r,a])=>{const o=AC.createOscillator(),og=AC.createGain();o.frequency.value=f*r;og.gain.value=a;o.connect(og);og.connect(g);o.start(t);o.stop(t+3)});
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.07*v,t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+2.6);let out=g;if(p){p.pan.value=R()*1.6-.8;g.connect(p);out=p}out.connect(dr.dry);out.connect(dr.rv);out.connect(dr.dl)}
+function blip(v=1){if(!sndOn||!AC)return;const n=performance.now();if(n-lastB<260)return;lastB=n;note(v*.8)}
+function whoosh(k=1){if(!sndOn||!AC)return;try{const t=AC.currentTime,s=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();s.buffer=dr.nb;f.type='lowpass';f.Q.value=.7;f.frequency.setValueAtTime(200,t);f.frequency.exponentialRampToValueAtTime(1600,t+1.6*k);f.frequency.exponentialRampToValueAtTime(250,t+2.8*k);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.5,t+1.5*k);g.gain.exponentialRampToValueAtTime(.0001,t+2.9*k);s.connect(f);f.connect(g);g.connect(dr.dry);g.connect(dr.rv);s.start(t);s.stop(t+3*k);[0,1,2].forEach(i=>setTimeout(()=>note(1.4),(1.7*k+i*.22)*1000))}catch(e){}}
+
+// ================= REAL TINY MODEL IN 3D (5x5 pixels → 8 hidden → 3 classes) =================
+const rw=(n,m,s)=>[...Array(n)].map(()=>[...Array(m)].map(()=>(R()-.5)*s));
+const MD={W1:rw(8,25,.6),b1:Array(8).fill(0),W2:rw(3,8,.6),b2:[0,0,0]},padX=new Float32Array(25);let padHover=false;
+function mfwd(x){const h=MD.W1.map((w,i)=>Math.tanh(w.reduce((s,v,j)=>s+v*x[j],MD.b1[i]))),z=MD.W2.map((w,i)=>w.reduce((s,v,j)=>s+v*h[j],MD.b2[i])),m=Math.max(...z),e=z.map(v=>Math.exp(v-m)),s=e.reduce((a,b)=>a+b,0);return[h,e.map(v=>v/s)]}
+function mSample(){const c=R()*3|0,r=R()*5|0,x=Array(25).fill(0),dg=R()<.5;for(let i=0;i<5;i++){const k=c===0?r*5+i:c===1?i*5+r:(dg?i*6:i*4+4);x[k]=R()<.15?0:1}return[x.map(v=>Math.max(0,Math.min(1,v*(.7+R()*.3)+(R()<.06?R()*.8:0)))),c]}
+for(let it=0;it<7000;it++){const[x,c]=mSample(),[h,p]=mfwd(x),dz=p.map((v,i)=>v-(i===c?1:0)),dh=h.map((_,j)=>dz.reduce((s,d,i)=>s+d*MD.W2[i][j],0)*(1-h[j]*h[j]));
+ dz.forEach((d,i)=>{MD.W2[i].forEach((_,j)=>MD.W2[i][j]-=.08*d*h[j]);MD.b2[i]-=.08*d});dh.forEach((d,j)=>{MD.W1[j].forEach((_,i)=>MD.W1[j][i]-=.08*d*x[i]);MD.b1[j]-=.08*d})}
+function makeModel(){const g=new THREE.Group(),P=[[],[],[]];
+ for(let i=0;i<25;i++)P[0].push(V(-6+(i%5-2)*.55,(2-(i/5|0))*.55,0));
+ for(let i=0;i<8;i++)P[1].push(V(0,(i-3.5)*.9,i%2?.7:-.7));
+ for(let i=0;i<3;i++)P[2].push(V(5.5,(1-i)*1.7,0));
+ const E=[];P[0].forEach((a,i)=>P[1].forEach((b,j)=>E.push([a,b,0,i,j])));P[1].forEach((a,j)=>P[2].forEach((b,k)=>E.push([a,b,1,j,k])));
+ const lg=new THREE.BufferGeometry(),lp=new Float32Array(E.length*6),lc=new Float32Array(E.length*6);
+ E.forEach((e,i)=>lp.set([e[0].x,e[0].y,e[0].z,e[1].x,e[1].y,e[1].z],i*6));
+ lg.setAttribute('position',new THREE.BufferAttribute(lp,3));lg.setAttribute('color',new THREE.BufferAttribute(lc,3));
+ g.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})));
+ const ng=new THREE.BufferGeometry().setFromPoints(P.flat()),nc=new Float32Array(36*3);ng.setAttribute('color',new THREE.BufferAttribute(nc,3));
+ const mk=(s,o)=>new THREE.PointsMaterial({size:s,map:glow,vertexColors:true,transparent:true,opacity:o,depthWrite:false,blending:THREE.AdditiveBlending});
+ g.add(new THREE.Points(ng,mk(.6,1)),new THREE.Points(ng,mk(1.9,.35)));
+ [['input 5×5',-6,3.4],['hidden · 8 tanh',0,4.2],['softmax',5.5,3.4]].forEach(([t,x,y])=>{const s=label(t,'#6fd6ff');s.position.set(x,y,0);s.scale.set(4.5,.9,1);g.add(s)});
+ const ol=['horizontal','vertical','diagonal'].map((t,i)=>{const s=label(t,'#ff9a52');s.position.set(7.8,(1-i)*1.7,0);s.scale.set(4.5,.9,1);g.add(s);return s});
+ const pg=document.getElementById('padg'),po=document.getElementById('padout'),NM=['horizontal','vertical','diagonal'];let fr=0;
+ ups.push(()=>{if(Math.abs(curA-3)>1)return;if(!padHover)for(let i=0;i<25;i++)padX[i]*=.996;
+  const[h,o]=mfwd(padX);
+  E.forEach((e,i)=>{const s=(e[2]?MD.W2[e[4]][e[3]]:MD.W1[e[4]][e[3]])*(e[2]?h[e[3]]:padX[e[3]]),m=Math.min(1,Math.abs(s)*1.8)+.035,c=s>0?[.2,.8,1]:[1,.45,.15];for(let k=0;k<6;k+=3){lc[i*6+k]=c[0]*m;lc[i*6+k+1]=c[1]*m;lc[i*6+k+2]=c[2]*m}});lg.attributes.color.needsUpdate=true;
+  for(let i=0;i<25;i++){const v=padX[i]*.9+.08;nc.set([.25*v,.85*v,v],i*3)}
+  for(let i=0;i<8;i++){const v=Math.abs(h[i])*.95+.05;nc.set([v,.55*v,.15*v],(25+i)*3)}
+  const w=o.indexOf(Math.max(...o));for(let i=0;i<3;i++){const v=o[i]*.95+.05;nc.set(i===w?[.4*v,v,.5*v]:[.6*v,.4*v,v],(33+i)*3);ol[i].material.opacity=.25+.75*o[i];ol[i].scale.set(4.5*(1+o[i]*.3),.9*(1+o[i]*.3),1)}ng.attributes.color.needsUpdate=true;
+  if(++fr%3===0){for(let i=0;i<25;i++)pg.children[i].style.background=`rgba(111,214,255,${.1+padX[i]*.85})`;po.textContent=NM.map((n,i)=>`${n.padEnd(11)}${'█'.repeat(Math.round(o[i]*12)).padEnd(12,'░')} ${o[i].toFixed(2)}`).join('\n')}});
+ return g}
+// input pad in the ANN card: hover to draw
+document.getElementById('live-ann').insertAdjacentHTML('beforebegin',`<div class="pad"><div class="padg" id="padg">${'<i></i>'.repeat(25)}</div><div class="padr"><span class="tag">hover to draw · a real trained model reacts</span><span id="padout"></span><button data-p="h">─</button><button data-p="v">│</button><button data-p="d">╲</button><button data-p="c">clear</button></div></div>`);
+{const pg=document.getElementById('padg');pg.addEventListener('pointermove',e=>{const r=pg.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*5|0,cy=(e.clientY-r.top)/r.height*5|0;if(cx>=0&&cx<5&&cy>=0&&cy<5){const i=cy*5+cx;if(padX[i]<.5)blip(.5);padX[i]=1}});pg.addEventListener('pointerenter',()=>padHover=true);pg.addEventListener('pointerleave',()=>padHover=false);
+ document.querySelectorAll('.padr button').forEach(b=>b.onclick=()=>{const k=b.dataset.p;padX.fill(0);for(let i=0;i<5;i++){if(k==='h')padX[10+i]=1;if(k==='v')padX[i*5+2]=1;if(k==='d')padX[i*6]=1}})}
+{const o3=outers[2],mm=makeModel();o3.remove(stages[2]);o3.add(mm);stages[2]=mm}
+// ================= INTERACTIVE LABS FOR EVERY STAGE (real computations) =================
+const PK=Array(9).fill(0);let NI=null,DIFFO=null;
+function diffM(){return DIFFO!=null?DIFFO:sm(.5+.5*Math.sin(performance.now()/1800))}
+const poke=i=>{PK[i]=1;blip(.7)};
+const mkLab=(k,t)=>{document.getElementById('live-'+k).insertAdjacentHTML('beforebegin',`<div class="lab" id="lab-${k}">${t}</div>`);return document.getElementById('lab-'+k)};
+const cvOf=r=>{const c=r.querySelector('canvas');return[c,c.getContext('2d')]},rel=(c,e)=>{const q=c.getBoundingClientRect();return[(e.clientX-q.left)/q.width*c.width,(e.clientY-q.top)/q.height*c.height]};
+const sdr=s=>()=>(s=(Math.imul(s,1664525)+1013904223)>>>0)/4294967296;
+// 1 · NEURON: drive it with your own input current
+{const r=mkLab('neuron',`<span class="tag">drive the neuron · input current</span><input type="range" min="0" max="40" value="20"><span id="nv">auto (sinusoidal)</span> <button>auto</button>`),s=r.querySelector('input'),v=r.querySelector('#nv');
+ s.oninput=()=>{NI=s.value/10;v.textContent=` I = ${NI.toFixed(1)} nA  (spike if V>θ)`;poke(0)};r.querySelector('button').onclick=()=>{NI=null;v.textContent='auto (sinusoidal)'}}
+// 2 · PERCEPTRON: add points, run the perceptron learning rule
+{const r=mkLab('perceptron',`<span class="tag">click = orange · shift-click = blue · run the perceptron rule</span><canvas width="300" height="150"></canvas><span id="pi"></span><br><button id="pl">▶ learn</button><button id="pr">reset</button>`),[cv,c]=cvOf(r);let pts,w,b,run=false;
+ const gs=()=>(R()+R()+R()-1.5)*.3,reset=()=>{pts=[];for(let i=0;i<12;i++)pts.push([-.5+gs(),-.4+gs(),0],[.5+gs(),.4+gs(),1]);w=[.1,-.3];b=.1},out=p=>w[0]*p[0]+w[1]*p[1]+b>0?1:0;reset();
+ cv.onclick=e=>{const[x,y]=rel(cv,e);pts.push([(x/300-.5)*4,y/75-1,e.shiftKey?1:0]);poke(1)};r.querySelector('#pl').onclick=e=>{run=!run;e.target.textContent=run?'⏸ pause':'▶ learn'};r.querySelector('#pr').onclick=reset;
+ setInterval(()=>{if(curA!==2)return;const bad=pts.filter(p=>out(p)!==p[2]);if(run&&bad.length){const p=bad[R()*bad.length|0],d=p[2]-out(p);w[0]+=.15*d*p[0];w[1]+=.15*d*p[1];b+=.15*d;poke(1)}
+  c.clearRect(0,0,300,150);const X=x=>(x/4+.5)*300,Y=y=>(y/2+.5)*150;if(Math.abs(w[1])>1e-3){c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.moveTo(0,Y(-(w[0]*-2+b)/w[1]));c.lineTo(300,Y(-(w[0]*2+b)/w[1]));c.stroke()}
+  pts.forEach(p=>{c.fillStyle=p[2]?'#6fd6ff':'#ff7a2a';c.beginPath();c.arc(X(p[0]),Y(p[1]),5,0,6.3);c.fill()});r.querySelector('#pi').textContent=`w=[${w[0].toFixed(2)},${w[1].toFixed(2)}] b=${b.toFixed(2)}  errors=${bad.length}/${pts.length}  rule: w ← w + η(t−y)x`},70)}
+// 4 · CNN: draw an image, pick a kernel
+{const r=mkLab('cnn',`<span class="tag">hover to draw a 7×7 image · pick a kernel</span><canvas width="300" height="140"></canvas><button data-k="0">Sobel-x</button><button data-k="1">Sobel-y</button><button data-k="2">blur</button><button data-k="3">sharpen</button><button data-k="9">clear</button>`),[cv,c]=cvOf(r),img=new Float32Array(49),KS=[[1,0,-1,2,0,-2,1,0,-1],[1,2,1,0,0,0,-1,-2,-1],Array(9).fill(1/9),[0,-1,0,-1,5,-1,0,-1,0]];let K=0;for(let i=0;i<7;i++){img[i*7+3]=1;img[21+i]=1}
+ const draw=()=>{c.clearRect(0,0,300,140);for(let i=0;i<49;i++){c.fillStyle=`rgba(111,214,255,${.08+img[i]*.9})`;c.fillRect((i%7)*20+1,(i/7|0)*20+1,18,18)}const o=[];let mx=.001;
+  for(let y=0;y<5;y++)for(let x=0;x<5;x++){let s=0;for(let i=0;i<3;i++)for(let j=0;j<3;j++)s+=img[(y+i)*7+x+j]*KS[K][i*3+j];s=Math.max(0,s);o.push(s);mx=Math.max(mx,s)}
+  o.forEach((s,i)=>{c.fillStyle=`rgba(255,154,82,${.08+s/mx*.9})`;c.fillRect(160+(i%5)*28+1,(i/5|0)*28+1,26,26)});c.fillStyle='#7f97b3';c.font='10px monospace';c.fillText('conv → ReLU  5×5',160,136)};
+ cv.onpointermove=e=>{const[x,y]=rel(cv,e);if(x<140&&y<140){img[(y/20|0)*7+(x/20|0)]=1;draw();poke(3)}};r.querySelectorAll('button').forEach(b=>b.onclick=()=>{b.dataset.k==='9'?img.fill(0):K=+b.dataset.k;draw()});draw()}
+// 5 · RNN vs LSTM: edit the input sequence
+{const r=mkLab('rnn',`<span class="tag">drag the bars (inputs xₜ) · RNN vs LSTM memory</span><canvas width="300" height="130"></canvas>`),[cv,c]=cvOf(r),xs=[.8,0,0,0,0,0];let dn=false;
+ const draw=()=>{c.clearRect(0,0,300,130);let h=0,hl=0,cl=0;const A=[],B=[],C=[];xs.forEach(x=>{h=Math.tanh(.6*h+1.1*x);const f=sig(.5*x+.4*hl-.1),i=sig(.7*x-.3*hl),o=sig(.2*x+.8*hl),g=Math.tanh(.9*x+.1*hl);cl=f*cl+i*g;hl=o*Math.tanh(cl);A.push(h);B.push(hl);C.push(cl)});
+  const X=t=>25+t*50,Y=v=>65-v*55;c.strokeStyle='rgba(111,214,255,.2)';c.beginPath();c.moveTo(0,65);c.lineTo(300,65);c.stroke();xs.forEach((x,t)=>{c.fillStyle='rgba(200,225,255,.35)';c.fillRect(X(t)-10,Math.min(65,Y(x)),20,Math.abs(Y(x)-65))});
+  [[A,'#ff9a52',0],[B,'#b79bff',0],[C,'#6fd6ff',1]].forEach(([a,col,d])=>{c.strokeStyle=col;c.lineWidth=2;c.setLineDash(d?[4,4]:[]);c.beginPath();a.forEach((v,t)=>c[t?'lineTo':'moveTo'](X(t),Y(v)));c.stroke()});c.setLineDash([]);
+  c.font='10px monospace';[['RNN h','#ff9a52'],['LSTM h','#b79bff'],['LSTM c','#6fd6ff']].forEach(([n,col],i)=>{c.fillStyle=col;c.fillText(n,6+i*70,124)})};
+ const set=e=>{const[x,y]=rel(cv,e),t=Math.max(0,Math.min(5,Math.round((x-25)/50)));xs[t]=Math.max(-1,Math.min(1,(65-y)/55));draw();poke(4)};cv.onpointerdown=e=>{dn=true;set(e)};cv.onpointermove=e=>dn&&set(e);addEventListener('pointerup',()=>dn=false);draw()}
+// 6 · AUTOENCODER: train 25→6→2→6→25 now, then walk the latent space
+const AEN=[[25,6],[6,2],[2,6],[6,25]].map(([m,n])=>({W:rw(n,m,.8),b:Array(n).fill(0)})),mfw=(net,x)=>{const a=[x];net.forEach((Q,l)=>{const z=Q.W.map((w,i)=>w.reduce((s,v,j)=>s+v*a[l][j],Q.b[i]));a.push(l<net.length-1?z.map(Math.tanh):z.map(sig))});return a};
+for(let it=0;it<9000;it++){const[x]=mSample(),a=mfw(AEN,x);let d=a[4].map((y,i)=>(y-x[i])*y*(1-y));for(let l=3;l>=0;l--){const Q=AEN[l],p=a[l],nd=p.map(()=>0);Q.W.forEach((w,i)=>w.forEach((v,j)=>{nd[j]+=v*d[i];w[j]-=.3*d[i]*p[j]}));Q.b.forEach((_,i)=>Q.b[i]-=.3*d[i]);d=nd.map((v,j)=>l?v*(1-p[j]*p[j]):0)}}
+{const r=mkLab('ae',`<span class="tag">hover the latent plane z ∈ [−1,1]² · the decoder draws 5×5</span><canvas width="300" height="150"></canvas>`),[cv,c]=cvOf(r),dec=z=>{let v=z;for(let l=2;l<4;l++){const Q=AEN[l],q=Q.W.map((w,i)=>w.reduce((s,u,j)=>s+u*v[j],Q.b[i]));v=l<3?q.map(Math.tanh):q.map(sig)}return v},S=[];for(let i=0;i<240;i++){const[x,k]=mSample();S.push([mfw(AEN,x)[2],k])}let zc=[0,0];
+ const draw=()=>{c.clearRect(0,0,300,150);S.forEach(([z,k])=>{c.fillStyle=['#6fd6ff','#ff9a52','#b79bff'][k];c.globalAlpha=.55;c.fillRect((z[0]+1)*75-2,(z[1]+1)*75-2,4,4)});c.globalAlpha=1;c.strokeStyle='#fff';c.strokeRect((zc[0]+1)*75-6,(zc[1]+1)*75-6,12,12);
+  dec(zc).forEach((v,i)=>{c.fillStyle=`rgba(255,154,82,${.05+v*.95})`;c.fillRect(160+(i%5)*28,(i/5|0)*28+4,26,26)});c.fillStyle='#7f97b3';c.font='10px monospace';c.fillText(`z=[${zc[0].toFixed(2)}, ${zc[1].toFixed(2)}]`,160,148)};
+ cv.onpointermove=e=>{const[x,y]=rel(cv,e);if(x<150){zc=[Math.max(-1,Math.min(1,x/75-1)),Math.max(-1,Math.min(1,y/75-1))];draw();poke(5)}};draw()}
+// 7 · TRANSFORMER: type a sentence, see real self-attention with positional encoding
+{const r=mkLab('tf',`<span class="tag">type a sentence · self-attention + positional encoding</span><input type="text" value="the brain learns fast" maxlength="40"><canvas width="300" height="170"></canvas><input type="range" min="3" max="30" value="10"><span id="tT"></span>`),[cv,c]=cvOf(r),inp=r.querySelector('input[type=text]'),sl=r.querySelector('input[type=range]'),D=8;
+ const hs=s=>{let h=2166136261;for(const ch of s){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0},mat=sd=>{const q=sdr(sd);return[...Array(D)].map(()=>[...Array(D)].map(()=>(q()-.5)*1.4))},Wq=mat(11),Wk=mat(23),mv=(v,M)=>M[0].map((_,j)=>v.reduce((s,x,i)=>s+x*M[i][j],0));
+ const draw=()=>{const T=inp.value.trim().split(/\s+/).filter(Boolean).slice(0,8),n=T.length;c.clearRect(0,0,300,170);if(!n)return;const tau=sl.value/10,
+  X=T.map((w,p)=>{const q=sdr(hs(w));return[...Array(D)].map((_,i)=>(q()-.5)*2+(i%2?Math.cos(p/Math.pow(10000,(i-1)/D)):Math.sin(p/Math.pow(10000,i/D))))}),Q=X.map(v=>mv(v,Wq)),K=X.map(v=>mv(v,Wk)),
+  A=Q.map(q=>{const s=K.map(k=>q.reduce((a,x,i)=>a+x*k[i],0)/Math.sqrt(D)/tau),m=Math.max(...s),e=s.map(v=>Math.exp(v-m)),z=e.reduce((a,b)=>a+b,0);return e.map(v=>v/z)}),cs=Math.min(30,230/n,150/n);
+  c.font='10px monospace';A.forEach((row,i)=>{c.fillStyle='#b6c9de';c.fillText(T[i].slice(0,8),2,28+i*cs+cs/2);row.forEach((p,j)=>{c.fillStyle=`rgba(255,154,82,${.05+p*.95})`;c.fillRect(66+j*cs,22+i*cs,cs-2,cs-2)})});
+  T.forEach((w,j)=>{c.fillStyle='#6fd6ff';c.save();c.translate(66+j*cs+cs/2,18);c.rotate(-.5);c.fillText(w.slice(0,6),0,0);c.restore()});r.querySelector('#tT').textContent=` τ=${tau.toFixed(1)}  softmax(QKᵀ/(√d·τ))`};inp.oninput=sl.oninput=()=>{draw();poke(6)};draw()}
+// 8 · DIFFUSION: scrub t — the 3D particles follow the same ᾱ
+{const r=mkLab('diff',`<span class="tag">drag t · forward diffusion on a 28×28 image (cosine schedule)</span><canvas width="300" height="116"></canvas><input type="range" min="0" max="1000" value="0"><span id="dT"></span><br><button id="dR">▶ reverse</button><button id="dA">auto</button>`),[cv,c]=cvOf(r),sl=r.querySelector('input'),q=sdr(7),x0=[],ep=[];
+ for(let y=0;y<28;y++)for(let x=0;x<28;x++){const rr=Math.hypot(x-13.5,y-13.5);x0.push(Math.abs(rr-11)<1.4||Math.hypot(x-9.5,y-10.5)<2||Math.hypot(x-18.5,y-10.5)<2||(Math.abs(rr-6.5)<1.2&&y>15)?1:-1);ep.push(Math.sqrt(-2*Math.log(q()+1e-9))*Math.cos(6.283*q()))}
+ const ab=t=>Math.pow(Math.cos((t/1000+.008)/1.008*Math.PI/2),2),draw=()=>{const t=+sl.value,a=ab(t);c.clearRect(0,0,300,116);for(let i=0;i<784;i++){const v=Math.sqrt(a)*x0[i]+Math.sqrt(1-a)*ep[i],X=(i%28)*4,Y=(i/28|0)*4;c.fillStyle=`rgba(255,154,82,${Math.max(0,Math.min(1,(v+1)/2))})`;c.fillRect(160+X,Y,4,4);c.fillStyle=`rgba(111,214,255,${(x0[i]+1)/2*.9+.05})`;c.fillRect(X,Y,4,4)}
+  r.querySelector('#dT').textContent=` t=${t}  ᾱ=${a.toFixed(3)}  SNR=${(a/(1-a+1e-9)).toFixed(2)}`;DIFFO=a};
+ let iv=0;sl.oninput=()=>{draw();poke(7)};r.querySelector('#dR').onclick=()=>{clearInterval(iv);if(+sl.value===0)sl.value=1000;iv=setInterval(()=>{sl.value=Math.max(0,sl.value-12);draw();if(+sl.value===0)clearInterval(iv)},30)};r.querySelector('#dA').onclick=()=>{clearInterval(iv);DIFFO=null;r.querySelector('#dT').textContent=' auto'};draw();DIFFO=null}
+// ================= SPACE INTRO: a galaxy, a constellation-network and the brain at its heart =================
+const intro=new THREE.Group();scene.add(intro);let introA=1,introFade=0;
+const fo=(o,v)=>{o.userData.o=v;return o},nf=m=>{m.fog=false;return m};
+{const n=7000,pos=new Float32Array(n*3),col=new Float32Array(n*3),c1=new THREE.Color(0xffb070),c2=new THREE.Color(0x4aa8ff),c3=new THREE.Color(0xb79bff);
+ for(let i=0;i<n;i++){const arm=i%3,r=Math.pow(R(),.7)*42,a=r*.28+arm*2.094+(R()-.5)*(.6+r*.02),t=Math.min(1,r/42),cc=c1.clone().lerp(t<.5?c2:c3,Math.min(1,t*1.6));
+  pos.set([Math.cos(a)*r,(R()-.5)*(2+(1-t)*5),Math.sin(a)*r],i*3);col.set([cc.r,cc.g,cc.b],i*3)}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));g.setAttribute('color',new THREE.BufferAttribute(col,3));
+ const gx=fo(new THREE.Points(g,nf(new THREE.PointsMaterial({size:.22,map:glow,vertexColors:true,transparent:true,opacity:.9,depthWrite:false,blending:THREE.AdditiveBlending}))),.9),gp=new THREE.Group();
+ gp.add(gx);gp.rotation.set(1.15,0,.35);gp.position.set(-8,-6,-38);intro.add(gp);ups.push(()=>{gx.rotation.y+=.0009})}
+[[0x7a4cff,-25,10,-45,70,.22],[0x1fa6d8,28,-8,-50,80,.18],[0xff6a3a,-5,-22,-40,55,.14],[0xb0408f,35,18,-55,60,.14]].forEach(([c,x,y,z,s,o])=>{const sp=new THREE.Sprite(nf(new THREE.SpriteMaterial({map:glow,color:c,transparent:true,opacity:o,depthWrite:false,blending:THREE.AdditiveBlending})));sp.position.set(x,y,z);sp.scale.set(s,s*.7,1);intro.add(fo(sp,o))});
+{const hl=new THREE.Sprite(nf(new THREE.SpriteMaterial({map:glow,color:0xff7a2a,transparent:true,opacity:.22,depthWrite:false,blending:THREE.AdditiveBlending})));hl.scale.set(11,11,1);hl.position.z=-3;intro.add(fo(hl,.22))}
+{const a=[];for(let i=0;i<3000;i++){const u=R()*2-1,t=R()*6.283,s=Math.sqrt(1-u*u),r=70+R()*60;a.push(V(Math.cos(t)*s*r,u*r,Math.sin(t)*s*r))}
+ const st=fo(pointsOf(a,nf(new THREE.PointsMaterial({size:.5,map:glow,color:0xcfe6ff,transparent:true,opacity:.8,depthWrite:false,blending:THREE.AdditiveBlending}))),.8);intro.add(st);ups.push(()=>{st.rotation.y+=.0002;st.material.size=.5+.12*Math.sin(performance.now()/700)})}
+{const N=[];for(let i=0;i<70;i++){const u=R()*2-1,t=R()*6.283,s=Math.sqrt(1-u*u),r=7+R()*9;N.push(V(Math.cos(t)*s*r,u*r*.7,Math.sin(t)*s*r-2))}
+ const E=[];N.forEach((a,i)=>N.map((b,j)=>[j,a.distanceTo(b)]).filter(o=>o[0]!==i).sort((x,y)=>x[1]-y[1]).slice(0,2).forEach(o=>E.push([a,N[o[0]]])));
+ intro.add(fo(pointsOf(N,nf(pm(.55,0xbfe6ff,.9))),.9),fo(linesOf(E,nf(lm(0x6fd6ff,.22))),.22),fo(pulses(E,45,0xffb070,.28),1))}
+[[4.4,.5,0],[5.4,1.1,.6],[6.6,-.6,1.2]].forEach(([r,rx,rz],k)=>{const pts=[];for(let i=0;i<=128;i++){const a=i/128*6.2832;pts.push(V(Math.cos(a)*r,0,Math.sin(a)*r))}
+ const g=new THREE.Group(),ln=fo(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),nf(lm(0x6fd6ff,.35))),.35),sat=fo(pointsOf([V(r,0,0),V(-r,0,0)],nf(pm(.9,k?0xff9a52:0x6fd6ff,1))),1);
+ g.add(ln,sat);g.rotation.set(rx,0,rz);intro.add(g);ups.push(()=>{sat.rotation.y+=.006*(1+k*.6)*(k%2?-1:1)})});
+const SS=[...Array(4)].map(()=>{const l=new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(0,0,0),V(0,0,0)]),nf(new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending})));l.frustumCulled=false;l.userData={life:0};intro.add(l);return l});
+ups.push(()=>SS.forEach(l=>{const d=l.userData;if(d.life<=0){if(R()<.008){d.life=1;d.p=V((R()-.5)*50,8+R()*14,-20-R()*25);d.v=V(-.9-R()*.8,-.45-R()*.3,0)}else{l.material.opacity=0;return}}
+ d.life-=.02;d.p.add(d.v);const pa=l.geometry.attributes.position;pa.setXYZ(0,d.p.x,d.p.y,d.p.z);pa.setXYZ(1,d.p.x-d.v.x*6,d.p.y-d.v.y*6,d.p.z);pa.needsUpdate=true;l.material.opacity=Math.max(0,d.life)*introA}));
+function introTick(){if(!intro.visible)return;if(introFade){introA=Math.max(0,introA-.012);if(introA<=0){intro.visible=false;return}}intro.traverse(o=>{if(o.material&&o.userData.o!=null)o.material.opacity=o.userData.o*introA})}
+function tickCnt(){const f=loadP/100,g=id=>document.getElementById(id);g('c1').textContent=(86*f).toFixed(1)+' B';g('c2').textContent=(100*f).toFixed(1)+' T';g('c3').textContent=(100*f).toFixed(0)+' B';
+ g('coord').textContent=`RA ${(5.58+Math.sin(performance.now()/2000)*.3).toFixed(3)}h · DEC −${(5.4+Math.cos(performance.now()/1700)*.2).toFixed(3)}°`}
+document.getElementById('lsnd').onclick=()=>{const s=document.getElementById('snd');s.click();document.getElementById('lsnd').textContent=s.textContent+' sound'};
+const clock=new THREE.Clock();
+function tick(){
+ const t=clock.getElapsedTime();flat+=(flatT-flat)*.05;spin*=.985;
+ brain.rotation.y+=.0025+spin*.06;brain.scale.z=1.3*(1-flat*.97);brain.visible=camPos.y>-70;LS.scale.z=1-flat*.97;
+ let tp,tl,k=0;
+ if(started){k=Math.max(0,Math.min(N-1,scrollY/innerHeight));const i=Math.min(N-2,Math.floor(k)),u=(i+sm(k-i))/(N-1);
+  tp=cC.getPoint(u);tl=lC.getPoint(u);tp.addScaledVector(tp.clone().sub(tl).normalize(),flat*16)}
+ else{tp=V(Math.sin(t*.15)*2.4,.7,9.8);tl=V(0,-.1,0)}
+ if(diveIdx>=0){const c=outers[diveIdx].position;tp=V(c.x,c.y,c.z+2.2);tl=V(c.x,c.y,c.z-12)}camPos.lerp(tp,diveIdx>=0?.045:(started&&k<.05?.025:.07));lookS.lerp(tl,.08);
+ const vx=camPos.x-prev.x,sp=camPos.distanceTo(prev);prev.copy(camPos);
+ camera.position.copy(camPos);camera.lookAt(lookS);
+ bank+=(Math.max(-.4,Math.min(.4,-vx*.25))-bank)*.1;dRoll+=((diveIdx>=0?.6:0)-dRoll)*.04;camera.rotateZ(bank+dRoll);
+ camera.translateX(mx*1.2*(1-flat));camera.translateY(-my*.8*(1-flat));
+ fovCur+=(60-flat*38+Math.min(24,sp*9)+(diveIdx>=0?30:0)-fovCur)*.12;camera.fov=fovCur;camera.updateProjectionMatrix();
+ stages.forEach((g,i)=>{PK[i]*=.93;g.scale.x=g.scale.y=1+PK[i]*.1;g.scale.z=1-flat*.97;g.rotation.y=(1-flat)*(Math.sin(t*.25+i)*.35+mx*.8);g.rotation.x=(1-flat)*my*.3;g.rotation.z=i===diveIdx?g.rotation.z+.03:g.rotation.z*.92});
+ tags.forEach(l=>l.position.y=l.userData.b+Math.sin(t*.6+l.userData.ph)*.5);
+ ups.forEach(u=>u());trail();droneUpdate();introTick();renderer.render(scene,camera);
+ const a=Math.round(k);dots.forEach((d,i)=>d.classList.toggle('act',i===a));
+ sections.forEach((el,i)=>{const on=started&&Math.abs(k-i)<.6;if(on&&!el.classList.contains('on'))scramble(el);el.classList.toggle('on',on)});curA=a;liveUpdate(a,t);
+ if(started){depth.textContent=`depth ${(-camPos.y).toFixed(0)} m · ${flatT?'2D plane':'3D volume'} · layer ${a}/${N-1}`;drawMap()}
+ requestAnimationFrame(tick)}
+tick();
+</script>
+</body>
+</html>
